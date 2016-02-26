@@ -40,7 +40,7 @@ public class preciseSearch{
 		int ratioLimit = 1000; //Based upon Maximum load on a trip divided by minimum distance. Multiplied by 10 for a safety margin.
 		int distanceLimit = 6000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
 		//int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunktercopy.txt");
-		double[][] coordMatrix = readCoordinates("/Users/Emil/Documents/exjobb/koordinater/femton.txt");
+		double[][] coordMatrix = readCoordinates("/Users/Emil/Documents/exjobb/koordinater/testpunkter.txt");
 
 		//Total number of cities
 		int n = coordMatrix.length;
@@ -50,7 +50,7 @@ public class preciseSearch{
 		//Since JaCoP will optimize the route as well as it can it must be hindered to take a shortest route 
 		//that for example contains 0 cities.
 		//Least amount of visited cities for a certain vehicle. 
-		int leastAmountOfCities = 14;
+		int leastAmountOfCities = 9;
 
 		//Volume of load in cities.			
 		double[] volumes  = new double[n]; //Need to be Integers for sumWeight-constraint. Count as parts of a hundred.
@@ -170,10 +170,12 @@ public class preciseSearch{
 		}
 
 		//Input for SelectChoicePoint
-		IntVar[] varVector = new IntVar[m*n];
+		FloatVar[] varVector = new FloatVar[m*n];
 		for(int i = 0; i < m; i++){
-			for(int j = 0; j < n; j++){
-				varVector[i * n + j] = nextCities[i][j];
+			for(int j = 0; j < n; j++){	
+				varVector[i * n + j] = new FloatVar(store,"floatNextCity",1.0,n);
+				Constraint conv = new XeqP(nextCities[i][j],varVector[i * n + j]);
+				store.impose(conv);
 			}
 		}
 		
@@ -503,27 +505,19 @@ public class preciseSearch{
 		
 		
 		DepthFirstSearch<FloatVar> search = new DepthFirstSearch<FloatVar>();
-		SplitSelectFloat<FloatVar> select = new SplitSelectFloat<FloatVar>(store,varVectorDistance,new LargestDomainFloat<FloatVar>());
-		boolean result = search.labeling(store,select);
-
-		//Search<IntVar> label = new DepthFirstSearch<IntVar>();
-
+		SplitSelectFloat<FloatVar> select = new SplitSelectFloat<FloatVar>(store,varVector,new LargestDomainFloat<FloatVar>());
+		
+		Optimize min = new Optimize(store,search,select,negRatio);
 
 
-
-		//This is where var,varSelect,tieBreakerVarSelect & indomain are decided
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVector,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		//SelectChoicePoint<IntVar> selectTwo = new SimpleSelect<IntVar>(varVector,new MaxRegret<IntVar>(),new IndomainMin<IntVar>());
-					
-		//Stuff for varVectorDistance
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		//SelectChoicePoint<IntVar> selectOne = new SimpleSelect<IntVar>(varVectorDistance,new MaxRegret<IntVar>(),new IndomainMin<IntVar>());
+		//boolean result = search.labeling(store,select);
+		boolean result = min.minimize();
 
 
 
-		//boolean result = label.labeling(store,select,negRatio);
-		//boolean resultOne = label.labeling(store,selectOne,negRatio);
-		//boolean resultTwo = label.labeling(store,selectTwo,negRatio);
+
+
+		
 
 
 		if (result) {
