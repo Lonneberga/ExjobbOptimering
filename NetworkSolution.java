@@ -95,6 +95,9 @@ public class NetworkSolution{
 		Node
 		Node
 		Node
+		Node
+		Node
+		Node
 		Source
 		Source
 		Sink
@@ -169,6 +172,8 @@ public class NetworkSolution{
 		IntVar totalDistance = new IntVar(store,"totalDistance",0,m*n*distanceLimit);
 		net.setCostVariable(totalDistance);
 
+
+
 		//Impose the network constraint
 		Constraint networkFlow = new NetworkFlow(net);
 		store.impose(networkFlow);
@@ -190,7 +195,7 @@ public class NetworkSolution{
 		IntVar[] terms = new IntVar[n+1];
 		IntVar[] sums = new IntVar[n+1];
 		for(int i = 0; i < n; i++){	
-			IntVar sumVar = new IntVar(store,"nodeSumVariable#" + i,0,n); //Sum cant be bigger than number of cities.
+			IntVar sumVar = new IntVar(store,"nodeSumVariable#" + i,0,n * m); //Sum cant be bigger than number of cities * number of vehicles.
 			terms = flowMatrix[i];
 			terms[n] = sumVar;
 			Constraint flowSumNode = new LinearInt(store,terms,weights,"==",0);
@@ -198,7 +203,7 @@ public class NetworkSolution{
 			sums[i] = sumVar;
 		}
 
-		IntVar flowSum = new IntVar(store,"flowSum",0,n);
+		IntVar flowSum = new IntVar(store,"flowSum",0,n * m);
 		sums[n] = flowSum;
 		Constraint flowSumTotal = new LinearInt(store,sums,weights,"==",0);
 		store.impose(flowSumTotal);
@@ -207,6 +212,10 @@ public class NetworkSolution{
 
 		Constraint leastAmount = new XgteqC(flowSum,leastAmountOfCities);
 		store.impose(leastAmount);
+
+
+		
+
 		
 		//If a vehicle travels from i --> j it shall not be allowed to travel from j --> i since this would
 		//lead to flow being "used up" to no effect. It causes discrepancy between flow graph and representation of vehicles.
@@ -223,6 +232,86 @@ public class NetworkSolution{
 				store.impose(notBoth);
 			}	
 		}
+
+		//Force nodes to be connected to source and sink to avoid subcircuits.
+
+		//Construct an array to keep track of wether a node is connected to a source or an node that is connected to a source and son on....
+
+		
+
+		//Define a matrix for which a row is the route of a vehicle. Also enforce a subCircuitConstraint on them.
+		IntVar[][] nextCities = new IntVar[m][n];
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j <n; j++){
+				nextCities[i][j] = new IntVar(store,"nextCity#" + i + (j+1),1,n);
+			}
+			IntVar[] nextCityArray = nextCities[i];
+			store.impose(new Subcircuit(nextCityArray));
+		}
+		//Defina matrix to keep record of weather a city is visited by a vehicle.
+		//NOTE NOTE NOTE: This matrix is probably not directly needed except maybe for convenience for side constraints.
+		//If I use it though I can lift some side constraints directly from the first implementation straight into this one.
+		//Then I might discuss the ease of doing so in my report.
+		IntVar[][] subCircuitMatrix = new IntVar[m][n];
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j <n; j++){
+				subCircuitMatrix[i][j] = new IntVar(store, "subcircuitmatrix#" + Integer.toString(i) + Integer.toString(j),0,1);
+			}
+		}
+
+		//Link the nextCities-matrix elements to the subCircuitMatrix elements.
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < m; j++){
+				IntVar nextCity = nextCities[i][j];
+				PrimitiveConstraint ctr = new XneqC(nextCity,j+1);
+				IntVar b = subCircuitMatrix[i][j];
+				store.impose(new Reified(ctr,b));
+			}
+		}
+
+		//Define an array to store m constraints that should obey to  c1 ∨ c2 ∨ · · · ∨ cn (disjunction)
+		PrimitiveConstraint[][] orMatrix = new PrimitiveConstraint[m][n];
+
+		//Find arcs with flow over them and link that to the nextCities-matrix and the or-Matrix.
+		for(int i = 0; i < n; i++){
+			for(int j = 0; j < n; j++){
+				IntVar flow =  flowMatrix[i][j];
+				PrimitiveConstraint positiveFlow = new XgtC(flow,0);
+				//FÅ RÄTT INDEX PÅ NEXTCITIES
+				for(int k = 0; k < m; k++){
+					//nextCity, k is the vehicle, i is the city to go from, j+1 is the city to go to. 
+					PrimitiveConstraint nextCityCtr = new XeqC(nextCities[k][i],j+1);
+					orMatrix[k][j] = nextCityCtr; //I must allow this assignment to be "overwritten" for each lap in the inner for-loop. In case of a node having flow to multiple nodes.
+					//For the same reason the constraints in the active column of the orMatrix must be imposed before the end of each lop of the inner for-loop.
+				}
+
+				PrimitiveConstraint[] orArray = new PrimitiveConstraint[m];
+				for(int k = 0; k < m; k++){
+					orArray[k] = orMatrix[k][j]; //I think this is the proper way to do it. MatLab is easier :P ??? [k][i] or [k][j]
+				}
+
+				PrimitiveConstraint orCtr = orArray[0]; //If there is only one vehicle, then there is no need for a disjunction
+				if(m > 1){
+					orCtr =  new Or(orArray); //Maybe this doesn't work if there is only one vehicle. Probably not.
+				}
+				
+				PrimitiveConstraint ifThenCtr = new IfThen(positiveFlow,orCtr);
+
+				store.impose(ifThenCtr);
+			}
+		} 
+
+		
+		
+		
+		
+		
+		
+
+
+
+
+
 
 
 		//Loads
@@ -266,6 +355,34 @@ public class NetworkSolution{
 
 
 
+		//-------------------SIDE CONSTRAINTS--------------------------
+
+		//Side constraint #1: How often a city must be visited at minimum.
+		//Take notice of the city indexes!
+
+		//Data
+
+		ArrayList<Integer> visitDueToTime = new ArrayList<Integer>();
+		//Test (stadindex 3 = stad nr 4 ty stadindex 0 är första staden)
+		visitDueToTime.add(0);
+		//visitDueToTime.add(7);
+		//visitDueToTime.add(8);
+		//visitDueToTime.add(9);
+		//Add cities that need to be visited to this list.
+
+		//Constraint
+		for(int city : visitDueToTime){
+			IntVar[] flowToNode = new IntVar[n];
+			int[] weightsA = new int[n];
+			for(int i = 0; i < n; i++){
+				flowToNode[i] = flowMatrix[city][i];
+				weightsA[i] = 1;
+			}
+			PrimitiveConstraint visitCtr = new LinearInt(store,flowToNode,weightsA,">",0);
+			store.impose(visitCtr);
+		}
+
+
 
 		//--------------------------SEARCH----------------------------
 
@@ -297,22 +414,17 @@ public class NetworkSolution{
 		boolean result = label.labeling(store,select);
 
 		if (result) {
-			System.out.println("\n*** Yes");
+			System.out.println("\n*** YES! SOLUTION FOUND!!!!");
 			System.out.println("Arrangment: "); 
-			printIntVarMatrix(flowMatrix,n,n); 
-			//System.out.println("Ratio: " + ratio);
-			//System.out.println("distance: " + totalDistance);
-			//System.out.println("load: " + totalLoad);
-			System.out.println("Visitedarray:");
-			printArray(visitedArray);
-			System.out.println("visitedLoads:");
-			printArray(visitedLoads);
-			System.out.println("Debug: " + flowSum);
-			System.out.println("Debug: " + totalLoad);
+			printIntVarMatrix(flowMatrix,n,n);
+			
+			System.out.println("distance: " + totalDistance);
+			
 			
 		}else {
 			System.out.println("\n*** No");
-			//printIntVarMatrix(flowMatrix,n,n);
+			printIntVarMatrix(flowMatrix,n,n);
+			
 		}
 
 
@@ -425,7 +537,7 @@ public class NetworkSolution{
 
 	static void printIntVarMatrix(IntVar[][] matrix, int row, int column){
 		for(int i = 0; i < row; i++){
-			System.out.println("Vehicle #" + (i+1) + "  ---------------------------------------");
+			System.out.println("Node #" + (i+1) + "  ---------------------------------------");
 			for(int j = 0; j < column; j++){
 				System.out.println(matrix[i][j]);
 			}
