@@ -87,7 +87,7 @@ public class NetworkSolutionMultipleNetworks{
 		//---------------------DEFINE A NETWORK-------------------------
 
 		//Construct the NetworkBuilder-array.
-		NetworkBuilder[] netArray = new NetworkBuilder[];
+		NetworkBuilder[] netArray = new NetworkBuilder[m];
 
 		for(int i = 0; i < m; i++){
 			netArray[i] = new NetworkBuilder();
@@ -109,7 +109,7 @@ public class NetworkSolutionMultipleNetworks{
 
 
 		*/
-		Node[][] nodeMatrix = new Node[regNbr + 2 * depotNbr][m];
+		Node[][] nodeMatrix = new Node[m][regNbr + 2 * depotNbr];
 
 
 
@@ -124,8 +124,8 @@ public class NetworkSolutionMultipleNetworks{
 		for(int i = 0; i < m; i++){
 			for(int j = 0; j < vehicleNumbers.length; j++){
 				int b = vehicleNumbers[j];
-				nodeMatrix[regNbr+j,i] = net.addNode("Source#" + i,b);
-				nodeMatrix[regNbr+depotNbr+j,i] = netArray[i].addNode("Sink#" + i,-b);
+				nodeMatrix[i][regNbr+j] = netArray[i].addNode("Source#" + i + j,b);
+				nodeMatrix[i][regNbr+depotNbr+j] = netArray[i].addNode("Sink#" + i + j,-b);
 			}
 		}
 
@@ -135,17 +135,17 @@ public class NetworkSolutionMultipleNetworks{
 
 		//Construct IntVars for upper and lower capacity. These will also represent the flow over an arc.
 		//Each row get an extra space to be used in LinearInt later on.
-		IntVar[][][] flowMatrix = new IntVar[n][n+1][m];
-		for(int = 0; k < m; k++){
-			for(int i = 0; i < n; i++){
-				for(int j = 0; j < n; j++){
-					boolean sameNode = (i != j); //
-					boolean	sourceSink = !((i >= regNbr) && (j >= regNbr)); //
-					boolean	sourceNoIn = !(j >= regNbr && j < regNbr+depotNbr); //No arcs into source
-					boolean sinkNoOut =  !(i >= regNbr + depotNbr); // No arcs out of sink
-					if(sameNode && sourceSink && sourceNoIn && sinkNoOut)flowMatrix[i][j][k] = new IntVar(store, i + "->" + j, 0,1);
+		IntVar[][][] flowMatrix = new IntVar[m][n][n+1];
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < n; j++){
+				for(int k = 0; k < n; k++){
+					boolean sameNode = (j != k); //
+					boolean	sourceSink = !((j >= regNbr) && (k >= regNbr)); //
+					boolean	sourceNoIn = !(k >= regNbr && k < regNbr+depotNbr); //No arcs into source
+					boolean sinkNoOut =  !(j >= regNbr + depotNbr); // No arcs out of sink
+					if(sameNode && sourceSink && sourceNoIn && sinkNoOut)flowMatrix[i][j][k] = new IntVar(store, j + "->" + k, 0,1);
 
-					else flowMatrix[i][j][k] = new IntVar(store, i + "->" + j, 0,0);
+					else flowMatrix[i][j][k] = new IntVar(store, j + "->" + k, 0,0);
 				}
 			}
 		}	
@@ -155,40 +155,45 @@ public class NetworkSolutionMultipleNetworks{
 		Node nodeA = null;
 		Node nodeB = null;
 		IntVar flowBounds = null;
-		for{int k = 0; k < m; k++}
-			for(int i = 0; i < n; i++){ 
-				nodeA = nodeArray[i];
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < n; j++){ 
+				nodeA = nodeMatrix[i][j];
 				//System.out.println("Debug: " + nodeA);
-				for(int j = 0; j < n; j++){
-					nodeB = nodeArray[j];
+				for(int k = 0; k < n; k++){
+					nodeB = nodeMatrix[i][k];
 					//System.out.println("Debug: " + nodeB);
-					boolean sameNode = (i != j); //
-					boolean	sourceSink = !((i >= regNbr) && (j >= regNbr)); //
-					boolean	sourceNoIn = !(j >= regNbr && j < regNbr+depotNbr); //No arcs into source
-					boolean sinkNoOut =  !(i >= regNbr + depotNbr); // No arcs out of sink
+					boolean sameNode = (j != k); //
+					boolean	sourceSink = !((j >= regNbr) && (k >= regNbr)); //
+					boolean	sourceNoIn = !(k >= regNbr && k < regNbr+depotNbr); //No arcs into source
+					boolean sinkNoOut =  !(j >= regNbr + depotNbr); // No arcs out of sink
 					if(sameNode && sourceSink && sourceNoIn && sinkNoOut){ //Cannot go from a node to that node itself, and it shouldn't allow for source and sink to connect directly. Source shouldn't connect to source either and sink shouldn't connect to sink.
-						cost = distanceMatrix[i][j];
+						cost = distanceMatrix[j][k];
 						//System.out.println("Debug: " + cost);
 						flowBounds = flowMatrix[i][j][k];
 						//System.out.println("Debug: " + flowBounds);
-						net.addArc(nodeA,nodeB,cost,flowBounds);
+						netArray[i].addArc(nodeA,nodeB,cost,flowBounds);
 					}
 				}
 			}
 		}
 
-
+		//Impose network constraint and 
 		//Define a cost.
-		//This should be the total cost-per-unit * flow over all arcs.
-		//This translates into total distance traveled by all vehicles.
+		IntVar[] vehicleDistanceArray = new IntVar[m];
+		for(int i = 0; i < m; i++){
+			vehicleDistanceArray[i] = new IntVar(store,"vehicleDistance",0,n * distanceLimit);
+			netArray[i].setCostVariable(vehicleDistanceArray[i]);
+			Constraint networkFlow = new NetworkFlow(netArray[i]);
+			store.impose(networkFlow);
+
+		}
 		IntVar totalDistance = new IntVar(store,"totalDistance",0,m*n*distanceLimit);
-		net.setCostVariable(totalDistance);
+		Constraint totalSumCtr = new SumInt(store,vehicleDistanceArray,"==",totalDistance);
+		store.impose(totalSumCtr);
 
 
 
-		//Impose the network constraint
-		Constraint networkFlow = new NetworkFlow(net);
-		store.impose(networkFlow);
+		
 
 
 		//------------------------------CONSTRAINTS-------------------------
@@ -205,26 +210,30 @@ public class NetworkSolutionMultipleNetworks{
 
 
 		IntVar[] terms = new IntVar[n+1];
-		IntVar[] sums = new IntVar[n+1];
-		for(int i = 0; i < n; i++){	
-			IntVar sumVar = new IntVar(store,"nodeSumVariable#" + i,0,n * m); //Sum cant be bigger than number of cities * number of vehicles.
-			terms = flowMatrix[i];
-			terms[n] = sumVar;
-			Constraint flowSumNode = new LinearInt(store,terms,weights,"==",0);
-			store.impose(flowSumNode);
-			sums[i] = sumVar;
+		IntVar[][] sums = new IntVar[m][n+1];
+		for(int i = 0; i < m ; i ++){
+			for(int j = 0; j < n; j++){	
+				IntVar sumVar = new IntVar(store,"nodeSumVariable#" + i + j,0,n * m); //Sum cant be bigger than number of cities * number of vehicles.
+				terms = flowMatrix[i][j];
+				terms[n] = sumVar;
+				Constraint flowSumNode = new LinearInt(store,terms,weights,"==",0);
+				store.impose(flowSumNode);
+				sums[i][j] = sumVar;
+			}
 		}
 
-		IntVar flowSum = new IntVar(store,"flowSum",0,n * m);
-		sums[n] = flowSum;
-		Constraint flowSumTotal = new LinearInt(store,sums,weights,"==",0);
-		store.impose(flowSumTotal);
+		//Here the constraint for least amount of cities is for each individual vehicle instead of them all together.
+		for(int i = 0; i < m; i++){
+			IntVar flowSum = new IntVar(store,"flowSum" + i,0,n * m);
+			sums[i][n] = flowSum;
+			Constraint flowSumTotal = new LinearInt(store,sums[i],weights,"==",0);
+			store.impose(flowSumTotal);
 
-		//Force flowSumTotal to have a minimum value. That is a certain amount of travels must be made by the vehicles.
+			//Force flowSumTotal to have a minimum value. That is a certain amount of travels must be made by the vehicles.
 
-		Constraint leastAmount = new XgteqC(flowSum,leastAmountOfCities);
-		store.impose(leastAmount);
-
+			Constraint leastAmount = new XgteqC(flowSum,leastAmountOfCities);
+			store.impose(leastAmount);
+		}
 
 		
 
@@ -235,14 +244,16 @@ public class NetworkSolutionMultipleNetworks{
 		//              #2 Triangle indifference applies
 		//This will produce redundant constraints since it will setup the same rule for a pair of nodes two times each.
 
-		for(int i = 0; i < n; i++){
+		for(int i = 0; i < m; i++){
 			for(int j = 0; j < n; j++){
-				IntVar iTOj = flowMatrix[i][j];
-				IntVar jTOi = flowMatrix[j][i];
-				IntVar[] v = {jTOi,iTOj};
-				Constraint notBoth = new LinearInt(store,v,new int[] {1,1},"<=",1);
-				store.impose(notBoth);
-			}	
+				for(int k = 0; k < n; k++){
+					IntVar jTOk = flowMatrix[i][j][k];
+					IntVar kTOj = flowMatrix[i][k][j];
+					IntVar[] v = {kTOj,jTOk};
+					Constraint notBoth = new LinearInt(store,v,new int[] {1,1},"<=",1);
+					store.impose(notBoth);
+				}	
+			}
 		}
 
 		//Force nodes to be connected to source and sink to avoid subcircuits.
@@ -257,6 +268,14 @@ public class NetworkSolutionMultipleNetworks{
 			for(int j = 0; j <n; j++){
 				nextCities[i][j] = new IntVar(store,"nextCity#" + i + (j+1),1,n);
 			}
+			//After sink there should be source
+			for(int j = 0; j < depotNbr; j++){
+				IntVar nextCity = nextCities[i][regNbr + depotNbr + j];
+				//Since depots are pairs of sources and sinks.
+				nextCity.setDomain(regNbr+j+1,regNbr+j+1);
+				nextCity.addDom(regNbr + depotNbr + j + 1,regNbr + depotNbr + j + 1);
+			}
+			
 			IntVar[] nextCityArray = nextCities[i];
 			store.impose(new Subcircuit(nextCityArray));
 		}
@@ -266,21 +285,26 @@ public class NetworkSolutionMultipleNetworks{
 		//Then I might discuss the ease of doing so in my report.
 		IntVar[][] subCircuitMatrix = new IntVar[m][n];
 		for(int i = 0; i < m; i++){
-			for(int j = 0; j <n; j++){
+			for(int j = 0; j < n; j++){
 				subCircuitMatrix[i][j] = new IntVar(store, "subcircuitmatrix#" + Integer.toString(i) + Integer.toString(j),0,1);
 			}
 		}
 
+
+
+
 		//Link the nextCities-matrix elements to the subCircuitMatrix elements.
 		for(int i = 0; i < m; i++){
-			for(int j = 0; j < m; j++){
+			for(int j = 0; j < n; j++){
 				IntVar nextCity = nextCities[i][j];
 				PrimitiveConstraint ctr = new XneqC(nextCity,j+1);
+
 				IntVar b = subCircuitMatrix[i][j];
 				store.impose(new Reified(ctr,b));
 			}
 		}
 
+		/*
 		//Define an array to store m constraints that should obey to  c1 ∨ c2 ∨ · · · ∨ cn (disjunction)
 		PrimitiveConstraint[][] orMatrix = new PrimitiveConstraint[m][n];
 
@@ -311,59 +335,111 @@ public class NetworkSolutionMultipleNetworks{
 
 				store.impose(ifThenCtr);
 			}
-		} 
+		} */
 
+		//Since each vehicle has a different flowMatrix the balance of nodes will not interact between vehicles. Therefore it must be made so that 
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < n; j++){
+				for(int k = 0; k < n; k++){
+					IntVar flow = flowMatrix[i][j][k];
+					PrimitiveConstraint positiveFlow = new XgtC(flow,0);
+					PrimitiveConstraint nextCityCtr = new XeqC(nextCities[i][j],k+1);  //Note that the indices here change from the other implementation. 
+					PrimitiveConstraint ifThenCtr = new IfThen(positiveFlow,nextCityCtr);
+					store.impose(ifThenCtr);
+				}
+			}
+		}
 		
-		
-		
-		
-		
-		
+		//Make sure that each non-depot is visited at most once. Directly lifted from first (non-flow) implementation.
 
-
-
-
-
-
-
-		//Loads
-
-		//Use the array sums from earlier (doing least amount of cities stuff).
-		//If sum[i] != 0, then that city has been visisted.
-		IntVar[] visitedArray = new IntVar[regNbr]; 
-		for(int i = 0; i < regNbr; i++){
-			visitedArray[i] = new IntVar(store, "visitedArray#" + i,0,1);
+		int[] columnWeights = new int[m];
+		for(int k = 0; k < m; k++){
+			columnWeights[k] = 1;
 		}
 
-
-		for(int i = 0; i < regNbr; i++){
-			IntVar b = visitedArray[i];
-			PrimitiveConstraint ctr = new XgtC(sums[i],0);
-			store.impose(new Reified(ctr,b));
-		} 
-
-		//Make array with loads for visited cities.
-		IntVar[] visitedLoads = new IntVar[regNbr+1];
-		for(int i = 0; i < regNbr; i++){
-			visitedLoads[i] = new IntVar(store, "visitedLoads#" + i, 0,100);
+		for(int j = 0; j < regNbr; j++){
+			IntVar[] column = new IntVar[m];
+			for(int i = 0; i < m; i++){
+				column[i] = subCircuitMatrix[i][j];
+			}
+			PrimitiveConstraint columnConstraint = new LinearInt(store,column,columnWeights,"<=",1);
+			store.impose(columnConstraint);
 		}
 
-		for(int i = 0; i < regNbr; i++){
-			Constraint ctr = new XmulCeqZ(visitedArray[i],volumes[i],visitedLoads[i]);
-			store.impose(ctr);
+		//To be able to use distance variables for side constraints they are calculated.
+
+		//Calculate the distance traveled by the vehicles.
+		IntVar[] vehicleDistanceArrayExtra = new IntVar[m];
+		for(int i = 0; i < m; i++){
+			IntVar[] cityDistanceArray = new IntVar[n];
+			for(int j = 0; j < n; j++){
+				IntVar nextCity = nextCities[i][j];
+				int[] distanceRow = distanceMatrix[j]; //Distance to different cities for city j.
+				
+				IntVar cityDistance = new IntVar(store,"cityDistance",0,distanceLimit); 
+				//Constraint ctr = new Element(nextCity,distanceRow,cityDistance,-1); 
+				//Constraint ctr = new Element(nextCity,distanceRow,cityDistance); 
+				Constraint ctr = new ElementInteger(nextCity,distanceRow,cityDistance,0); 
+				store.impose(ctr);
+				cityDistanceArray[j] = cityDistance;
+
+
+			}
+			IntVar vehicleDistance = new IntVar(store,"vehicleDistance",0,n * distanceLimit); 
+			Constraint sumCtr = new SumInt(store,cityDistanceArray,"==",vehicleDistance);
+			store.impose(sumCtr);
+			vehicleDistanceArrayExtra[i] = vehicleDistance;
 		}
 
-		int[] loadWeights = new int[regNbr+1];
-		for(int i = 0; i < regNbr; i++){
-			loadWeights[i] = 1;
-		}
-		loadWeights[regNbr] = -1;
+		IntVar totalDistancePrintable = new IntVar(store,"totalDistancePrintable",0,m * n * distanceLimit);
+		Constraint totalSumCtrExtra = new SumInt(store,vehicleDistanceArrayExtra,"==",totalDistancePrintable);
+		store.impose(totalSumCtrExtra);
 
-		//Sum up the loads.
-		IntVar totalLoad = new IntVar(store, "totalLoad", 0, 100*regNbr);
-		visitedLoads[regNbr] = totalLoad;
-		Constraint sumTotalLoad = new LinearInt(store,visitedLoads,loadWeights,"==",0);
-		store.impose(sumTotalLoad);
+		
+		
+		
+		
+		
+
+
+
+
+
+
+
+		//Loads. Just lift the load stuff from the first (non-flow) implementation.
+
+		//Store the load for each vehicle.
+		IntVar[] vehicleLoads = new IntVar[m];
+		//Make a matrix where an element is the product of boolean whether a city is visited and that cities volume. Row: Vehicle, Column; city
+		//Initialize
+		IntVar[][] cityVisitedLoad = new IntVar[m][n];
+		for(int i = 0;i < m; i++){
+			for(int j = 0; j < n; j++){
+				cityVisitedLoad[i][j] = new IntVar(store,"cityVisitedLoad#" + Integer.toString(i) +","+ Integer.toString(j), 0,100);
+			}
+		}
+		//Make constraints
+		for(int i =0; i < m; i++){
+			for(int j = 0; j < n; j++){
+				Constraint ctr = new XmulCeqZ(subCircuitMatrix[i][j],volumes[j], cityVisitedLoad[i][j]);
+				store.impose(ctr);
+			}
+		}
+
+		//Volume for a certain vehicle
+		for(int i = 0; i < m; i++){
+			IntVar[] list = cityVisitedLoad[i];
+			IntVar vehicleLoad = new IntVar(store,"vehicleLoad#" + Integer.toString(i),0,(100*n));  //Upper limit of vehicle load here.  (Defualt: 100% of each cities load, If there is a limit to how many cities could be visited then that value should replace n.)
+			Constraint sumWeight = new SumInt(store,list,"==",vehicleLoad);
+			store.impose(sumWeight);
+			vehicleLoads[i] = vehicleLoad;
+		}
+
+		//Sum up the vehicles load to a total load.
+		IntVar totalLoad = new IntVar(store,"totalLoad",0,(100*n));
+		store.impose(new SumInt(store,vehicleLoads,"==",totalLoad));
+
 
 
 
@@ -376,23 +452,93 @@ public class NetworkSolutionMultipleNetworks{
 
 		ArrayList<Integer> visitDueToTime = new ArrayList<Integer>();
 		//Test (stadindex 3 = stad nr 4 ty stadindex 0 är första staden)
-		visitDueToTime.add(0);
-		//visitDueToTime.add(7);
+		//visitDueToTime.add(0);
+		//visitDueToTime.add(1);
 		//visitDueToTime.add(8);
 		//visitDueToTime.add(9);
 		//Add cities that need to be visited to this list.
 
 		//Constraint
-		for(int city : visitDueToTime){
-			IntVar[] flowToNode = new IntVar[n];
-			int[] weightsA = new int[n];
-			for(int i = 0; i < n; i++){
-				flowToNode[i] = flowMatrix[city][i];
-				weightsA[i] = 1;
+
+		//Sum of flow to a certain node for a certain vehicle.
+	
+		
+		for(int city: visitDueToTime){
+			IntVar[] nodeSums = new IntVar[m];
+			IntVar vehicleSum = new IntVar(store,"vehicleFlow",0,n*m);
+			for(int i = 0; i < m; i++){
+				IntVar[] flows = new IntVar[n];
+				IntVar flowNodeSum = new IntVar(store,"flowNodeSum",0,n*m);
+				for(int j = 0; j < n; j++){
+					flows[j] = flowMatrix[i][j][city];	
+				}
+				store.impose(new SumInt(store,flows,"==",flowNodeSum));
+				nodeSums[i] = flowNodeSum; 
 			}
-			PrimitiveConstraint visitCtr = new LinearInt(store,flowToNode,weightsA,">",0);
-			store.impose(visitCtr);
+			store.impose(new SumInt(store,nodeSums,"==",vehicleSum));
+			store.impose(new XeqC(vehicleSum,1));
+		}	
+
+		//Side constraint #2: How long a route can be in units of length.
+		//Data
+		//int hardDistanceLimit = 2;
+
+		//Constraint
+
+		//Ganska reduntant constraint, optimering kommer försöka hitta kortaste möjliga ändå. Det enda denna skule kunna göra
+		//är att meddela att man bör minska antalet påtvingade besökta städer per rutt.
+		/*
+		for(IntVar vehicleDistance : vehicleDistanceArray){
+			PrimitiveConstraint distCtr = new XltC(vehicleDistance,hardDistanceLimit);
+			store.impose(distCtr);
+		}*/
+		
+
+		//Side constraint #3 
+		//Data
+		int mostAmountofcities = n;
+
+		//Constraintt How many cities a certain vehicle route can contain at most.
+		for(int i = 0; i < m; i++){
+			IntVar[] list = subCircuitMatrix[i];
+			//Enforce a minimum amount of visited cites per vehicle, or a range (lower bound, upper bound)
+			int[] weightsC = new int[n];
+			for(int k = 0; k < n; k++){
+				weightsC[k] = 1;
+			}
+			PrimitiveConstraint ub = new LinearInt(store,list,weights,"<=",mostAmountofcities);
+			store.impose(ub);
+		}		
+		
+		//Data
+		//For each city declare an upper limit of how full it's volume is allowed to be. Represented with a list.
+		int[] maxVolumes = new int[n];
+
+		//Default: no restriction.
+		for(int j = 0; j < n; j++){
+			maxVolumes[j] = 101;
 		}
+		maxVolumes[0] = 1;
+
+		//Constraint
+		//If the volume is greater than the maxVolume for some city, then that city must be visited by a vehicle.
+		for(int j = 0; j < regNbr; j++){
+			if(volumes[j] >= maxVolumes[j]){
+				//System.out.println("Debug maxVolume:" + j + "     volume:" + volumes[j] + "    maxvolume:   " + maxVolumes[j]);
+				IntVar[] vehicles = new IntVar[m];
+				int[] weightsD = new int[m];
+				for(int i = 0; i < m ; i++){
+					vehicles[i] = subCircuitMatrix[i][j];
+					weightsD[i] = 1; 
+				}	
+				PrimitiveConstraint volCtr = new LinearInt(store,vehicles,weightsD,"=",1);
+				store.impose(volCtr);
+			}
+		}
+		
+
+
+		
 
 
 
@@ -403,10 +549,12 @@ public class NetworkSolutionMultipleNetworks{
 		ArrayList<IntVar> dummyList = new ArrayList<IntVar>();
 
 		
-		for(int i = 0; i < n; i++){
+		for(int i = 0; i < m; i++){
 			for(int j = 0; j < n; j++){
+				for(int k = 0; k < n; k++){
 					//System.out.print("Debug: " + i + j);
-					dummyList.add(flowMatrix[i][j]);
+					dummyList.add(flowMatrix[i][j][k]);
+				}
 			}
 		}
 		IntVar[] varVector = dummyList.toArray(new IntVar[dummyList.size()]);
@@ -428,14 +576,19 @@ public class NetworkSolutionMultipleNetworks{
 		if (result) {
 			System.out.println("\n*** YES! SOLUTION FOUND!!!!");
 			System.out.println("Arrangment: "); 
-			printIntVarMatrix(flowMatrix,n,n);
+			printIntVarMatrix(nextCities,m,n);
+
+			printArray(vehicleDistanceArrayExtra);
+
 			
 			System.out.println("distance: " + totalDistance);
-			
+			System.out.println("--------DEBUG--------");
+			System.out.println("subCircuitMatrix");
+			printIntVarMatrix(subCircuitMatrix,m,n);
 			
 		}else {
 			System.out.println("\n*** No");
-			printIntVarMatrix(flowMatrix,n,n);
+			printIntVarMatrix(nextCities,m,n);
 			
 		}
 
