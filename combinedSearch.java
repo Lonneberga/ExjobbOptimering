@@ -19,6 +19,8 @@ import org.jacop.floats.constraints.XeqP;
 import org.jacop.constraints.ElementInteger;
 
 
+
+
 public class combinedSearch{
 
 
@@ -39,28 +41,33 @@ public class combinedSearch{
 		int ratioLimit = 1000; //Based upon Maximum load on a trip divided by minimum distance. Multiplied by 10 for a safety margin.
 		int distanceLimit = 6000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
 		//int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunktercopy.txt");
-		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/femton.txt");
+		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/sixty.txt");
 
 		//Total number of cities
 		int n = coordMatrix.length;
 		int[][] distanceMatrix = distanceMatrix(coordMatrix);
 		//printMatrix(distanceMatrix,n,n);
+		//printMatrix(coordMatrix,n,2);
+
+		//Number of vehicles
+		int m = 60; 
 		
 		//Since JaCoP will optimize the route as well as it can it must be hindered to take a shortest route 
 		//that for example contains 0 cities.
 		//Least amount of visited cities for a certain vehicle. 
-		int leastAmountOfCities = 14;
+		int citiesToVisitNbr = (n-2)/m;
+		System.out.println("Debug: " + citiesToVisitNbr);
+		//int citiesToVisitNbr = 5;
+		int leastAmountOfCities = citiesToVisitNbr + 2; 
 
 		//Volume of load in cities.			
-		int[] volumes  = new int[n]; //Need to be Integers for sumWeight-constraint. Count as parts of a hundred.
-		//Does not use sumWeight anymore. Might be able to use double and later on FloatVar 
+		int[] volumes  = new int[n]; 
 		for(int i = 0; i < n; i++){
-			volumes[i] = 100;
+			volumes[i] = 0;
 		}
+		//volumes[4] = 100;
 
-
-		//Number of vehicles
-		int m = 1; 
+		
 
 		//Declare a store to put constraints into.
 		Store store = new Store();
@@ -125,7 +132,7 @@ public class combinedSearch{
 		/*Comment: It's effectively the same thing to enforce only start city or only end city.*/
 
 		//Side constraint #6: Enforce two specific "special-cities" one where vehicles start from and another where they end up. Does not contain a load.
-		int endNbr = 0;
+		int endNbr = 1;
 		
 
 
@@ -366,7 +373,7 @@ public class combinedSearch{
 		/*Comment: It's effectively the same thing to enforce only start city or only end city.*/
 
 		//Side constraint #6: Enforce two specific "special-cities" one where vehicles start from and another where they end up. Does not contain a load.
-		/*
+		
 		//endLoc-cities must point only to startLoc-cities. 
 		for(int i = 0; i < m; i++){
 			for(int j = regNbr + startNbr; j < n; j++){
@@ -398,7 +405,7 @@ public class combinedSearch{
 				}
 			}
 		}
-		*/
+		
 		
 		
 		
@@ -443,20 +450,7 @@ public class combinedSearch{
 		store.impose(negationConstraint);
 
 
-		//Double Trouble
-		/*
-		Search<IntVar> slave = new DepthFirstSearch<IntVar>();
-		SelectChoicePoint<IntVar> selectSlave = new SimpleSelect<IntVar>(varVector, new MaxRegret<IntVar>(), new IndomainMin<IntVar>());
-		slave.setSelectChoicePoint(selectSlave);
-
-		Search<IntVar> master = new DepthFirstSearch<IntVar>();
-		SelectChoicePoint<IntVar> selectMaster = new SimpleSelect<IntVar>(varVectorDistance, new MaxRegret<IntVar>(), new IndomainMin<IntVar>());
-		master.addChildSearch(slave);
-
-		boolean result = master.labeling(store,selectMaster, negRatio);
 		
-		
-		*/
 		Search<IntVar> label = new DepthFirstSearch<IntVar>();
 
 		//This is where var,varSelect,tieBreakerVarSelect & indomain are decided
@@ -470,7 +464,7 @@ public class combinedSearch{
 
 
 		//boolean result = label.labeling(store,select,negRatio);
-		boolean resultOne = label.labeling(store,selectOne,negRatio);
+		boolean resultOne = label.labeling(store,selectOne);
 		//boolean resultTwo = label.labeling(store,selectTwo,negRatio);
 
 

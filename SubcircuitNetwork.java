@@ -57,7 +57,7 @@ public class SubcircuitNetwork{
 
 
 		*/
-		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunkter.txt");
+		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/sixty.txt");
 
 		//Total number of cities
 		int n = coordMatrix.length;
@@ -67,12 +67,32 @@ public class SubcircuitNetwork{
 		//This will be the number of sources.
 		int depotNbr = 1;
 
+		//Number of vehicles at each depot. (translated into balance of source and sink)
+		//IF MORE THAN ONE DEPOT: FORCE SUBCIRCUIT-MATRIX TO BE EQUAL TO TO THE RIGHT AMOUNT IN EACH DEPOT
+		int[] vehicleNumbers = new int[depotNbr];
+		vehicleNumbers[0] = 60;
+		//vehicleNumbers[1] = 1;
+		//vehicleNumbers[2] = 
+
+		//Total number of vehicles
+		int m = 0;
+		for(int i = 0; i < vehicleNumbers.length; i++){
+			m += vehicleNumbers[i];
+		}
+
+		
+
 
 		//Number of regular cities.
 		int regNbr = n - 2 * depotNbr;
 
 		//Least amount of cities that must be visited
-		int leastAmountOfCities = 2;
+		
+		int citiesToVisitNbr = (n-2)/m;
+		System.out.println("Debug: " + citiesToVisitNbr);
+		//int citiesToVisitNbr = 20;
+		int leastAmountOfCities = citiesToVisitNbr + 2; 
+		//int leastAmountOfCities = 2;
 
 		//Volume of load in cities
 		int[] volumes = new int[n];
@@ -83,18 +103,7 @@ public class SubcircuitNetwork{
 		//volumes[5] = 1;
 		//volumes[6] = 0;
 
-		//Number of vehicles at each depot. (translated into balance of source and sink)
-		//IF MORE THAN ONE DEPOT: FORCE SUBCIRCUIT-MATRIX TO BE EQUAL TO TO THE RIGHT AMOUNT IN EACH DEPOT
-		int[] vehicleNumbers = new int[depotNbr];
-		vehicleNumbers[0] = 2;
-		//vehicleNumbers[1] = 1;
-		//vehicleNumbers[2] = 
-
-		//Total number of vehicles
-		int m = 0;
-		for(int i = 0; i < vehicleNumbers.length; i++){
-			m += vehicleNumbers[i];
-		}
+		
 
 		Store store = new Store();
 
@@ -376,6 +385,101 @@ public class SubcircuitNetwork{
 				}
 			}
 		}
+		//------------------------------------SIDE CONSTRAINTS---------------------------------
+
+		//Side constraint #1: How often a city must be visited at minimum.
+
+		/*Comment: I imagine that this would be dependent on querying a database to check for the latest date the city was visited.
+		this date is then compared to the current date. If the difference is larger than a set period of time the city must be visited.
+		I will represent this with a list of cities that need to be visited. If it's empty then no citys have to be visited due to time.*/ 
+
+		//Take notice of the city indexes!
+		ArrayList<Integer> visitDueToTime = new ArrayList<Integer>();
+		//Test (stadindex 3 = stad nr 4 ty stadindex 0 är första staden)
+		//visitDueToTime.add(0);
+		//visitDueToTime.add(7);
+		//visitDueToTime.add(8);
+		//visitDueToTime.add(9);
+		//Add cities that need to be visited to this list.
+
+
+		//Take notice of the city indices!
+		for(int city : visitDueToTime){
+			IntVar[] vehicles = new IntVar[m];
+			int[] weights = new int[m];
+			for(int i = 0; i < m ; i++){
+				vehicles[i] = subCircuitMatrix[i][city];
+				weights[i] = 1; 
+			}
+			PrimitiveConstraint visitCtr = new LinearInt(store,vehicles,weights,"=",1);
+			store.impose(visitCtr);
+		}
+
+		//Side constraint #2: How long a route can be in units of length.
+		int hardDistanceLimit = 2;
+
+		//Side constraint #2: How long a route can be in units of length.
+		//Ganska reduntant constraint, optimering kommer försöka hitta kortaste möjliga ändå. Det enda denna skule kunna göra
+		//är att meddela att man bör minska antalet påtvingade besökta städer per rutt.
+		/*
+		for(IntVar vehicleDistance : vehicleDistanceArray){
+			PrimitiveConstraint distCtr = new XltC(vehicleDistance,hardDistanceLimit);
+			store.impose(distCtr);
+		}*/
+
+		//Side constraint #3: How many cities a certain vehicle route can contain at most.
+		int mostAmountofcities = n; //n by default.
+
+		//Side constraint #3: How many cities a certain vehicle route can contain at most.
+		for(int i = 0; i < m; i++){
+			IntVar[] list = subCircuitMatrix[i];
+			//Enforce a minimum amount of visited cites per vehicle, or a range (lower bound, upper bound)
+			int[] weights = new int[n];
+			for(int k = 0; k < n; k++){
+				weights[k] = 1;
+			}
+			PrimitiveConstraint ub = new LinearInt(store,list,weights,"<=",mostAmountofcities);
+			store.impose(ub);
+		}
+
+		//Side constraint #4: How full a cities volume can be at most.
+
+		/*Comment: The input for this is given as a float, but it will have to be rounded of to parts of hundreds (or thousands or...) and 
+		be represented as an Integer.*/
+
+		//For each city declare an upper limit of how full it's volume is allowed to be. Represented with a list.
+		int[] maxVolumes = new int[n];
+		int buffer = 0;
+
+		//Default: no restriction.
+		for(int j = 0; j < n; j++){
+			maxVolumes[j] = 101;
+		}
+		//maxVolumes[0] = -1;
+
+		//Side constraint #4: How full a cities volume can be at most.
+
+		//If the volume is greater than the maxVolume for some city, then that city must be visited by a vehicle.
+		for(int j = 0; j < regNbr; j++){
+			if(volumes[j] + buffer >= maxVolumes[j]){
+				//System.out.println("Debug maxVolume:" + j + "     volume:" + volumes[j] + "    maxvolume:   " + maxVolumes[j]);
+				IntVar[] vehicles = new IntVar[m];
+				int[] weights = new int[m];
+				for(int i = 0; i < m ; i++){
+					vehicles[i] = subCircuitMatrix[i][j];
+					weights[i] = 1; 
+				}	
+				PrimitiveConstraint volCtr = new LinearInt(store,vehicles,weights,"=",1);
+				store.impose(volCtr);
+			}
+		}
+
+
+
+
+
+
+
 
 		//-------------------------------------SEARCH---------------------------------------------------------------
 		
@@ -411,7 +515,8 @@ public class SubcircuitNetwork{
 
 
 
-		boolean resultOne = label.labeling(store,selectOne,negRatio);
+		//boolean resultOne = label.labeling(store,selectOne,negRatio);
+		boolean resultOne = label.labeling(store,selectOne);
 		
 
 
@@ -419,12 +524,12 @@ public class SubcircuitNetwork{
 			System.out.println("\n*** Yes");
 			System.out.println("Arrangment: "); 
 			printIntVarMatrix(nextCities,m,n);
-			printIntVarMatrix(subCircuitMatrix,m,n); 
+			//printIntVarMatrix(subCircuitMatrix,m,n); 
 			//printIntVarMatrix(cityVisitedLoad,m,n);
 			System.out.println("Ratio: " + ratio);
 			System.out.println("distance: " + totalDistance);
 			System.out.println("load: " + totalLoad);
-			printIntVarMatrix(flowMatrix,n,n);
+			//printIntVarMatrix(flowMatrix,n,n);
 			
 		}
 		else {

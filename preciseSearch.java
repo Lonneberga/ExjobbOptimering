@@ -18,6 +18,7 @@ import org.jacop.floats.constraints.PmulCeqR;
 import org.jacop.floats.constraints.XeqP;
 import org.jacop.constraints.ElementInteger;
 import org.jacop.floats.search.*;
+import java.lang.Math;
 
 
 public class preciseSearch{
@@ -40,28 +41,35 @@ public class preciseSearch{
 		int ratioLimit = 1000; //Based upon Maximum load on a trip divided by minimum distance. Multiplied by 10 for a safety margin.
 		int distanceLimit = 6000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
 		//int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunktercopy.txt");
-		double[][] coordMatrix = readCoordinates("/Users/Emil/Documents/exjobb/koordinater/testpunkter.txt");
+		double[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/sixty.txt");
 
 		//Total number of cities
 		int n = coordMatrix.length;
 		double[][] distanceMatrix = distanceMatrix(coordMatrix);
 		//printMatrix(distanceMatrix,n,n);
+		//printMatrix(coordMatrix,n,2);
+
+		//Number of vehicles
+		int m = 60; 
 		
 		//Since JaCoP will optimize the route as well as it can it must be hindered to take a shortest route 
 		//that for example contains 0 cities.
 		//Least amount of visited cities for a certain vehicle. 
-		int leastAmountOfCities = 9;
+		int citiesToVisitNbr = (n-2)/m;
+		System.out.println("Debug: " + citiesToVisitNbr);
+		//int citiesToVisitNbr = 5;
+		int leastAmountOfCities = citiesToVisitNbr + 2; 
+
 
 		//Volume of load in cities.			
 		double[] volumes  = new double[n]; //Need to be Integers for sumWeight-constraint. Count as parts of a hundred.
 		//Does not use sumWeight anymore. Might be able to use double and later on FloatVar 
 		for(int i = 0; i < n; i++){
-			volumes[i] = 1;
+			volumes[i] = 0;
 		}
 
 
-		//Number of vehicles
-		int m = 1; 
+		
 
 		//Declare a store to put constraints into.
 		Store store = new Store();
@@ -126,7 +134,7 @@ public class preciseSearch{
 		/*Comment: It's effectively the same thing to enforce only start city or only end city.*/
 
 		//Side constraint #6: Enforce two specific "special-cities" one where vehicles start from and another where they end up. Does not contain a load.
-		int endNbr = 0;
+		int endNbr = 1;
 		
 
 
@@ -430,7 +438,7 @@ public class preciseSearch{
 		/*Comment: It's effectively the same thing to enforce only start city or only end city.*/
 
 		//Side constraint #6: Enforce two specific "special-cities" one where vehicles start from and another where they end up. Does not contain a load.
-		/*
+		
 		//endLoc-cities must point only to startLoc-cities. 
 		for(int i = 0; i < m; i++){
 			for(int j = regNbr + startNbr; j < n; j++){
@@ -462,7 +470,7 @@ public class preciseSearch{
 				}
 			}
 		}
-		*/
+		
 		
 		
 		
@@ -505,19 +513,13 @@ public class preciseSearch{
 		
 		
 		DepthFirstSearch<FloatVar> search = new DepthFirstSearch<FloatVar>();
-		SplitSelectFloat<FloatVar> select = new SplitSelectFloat<FloatVar>(store,varVector,new LargestDomainFloat<FloatVar>());
+		SplitSelectFloat<FloatVar> select = new SplitSelectFloat<FloatVar>(store,varVectorDistance,new SmallestDomainFloat<FloatVar>());
 		
-		Optimize min = new Optimize(store,search,select,negRatio);
+		//Optimize min = new Optimize(store,search,select);
 
 
-		//boolean result = search.labeling(store,select);
-		boolean result = min.minimize();
-
-
-
-
-
-		
+		boolean result = search.labeling(store,select);
+		//boolean result = min.minimize();
 
 
 		if (result) {
@@ -536,9 +538,9 @@ public class preciseSearch{
 //------------------------------------------------------Other methods------------------------------------------------------------------------	
 
 
-	static int findShortest(int endLocIndex,int indexOfFirstStartLoc,int nbrOfStartLocs,int[][] distanceMatrix){
+	static int findShortest(int endLocIndex,int indexOfFirstStartLoc,int nbrOfStartLocs,double[][] distanceMatrix){
 		int shortest = 0;
-		int shortestDistance = Integer.MAX_VALUE;
+		double shortestDistance = Double.MAX_VALUE;
 		for(int i = indexOfFirstStartLoc; i < (indexOfFirstStartLoc + nbrOfStartLocs); i++){
 			if(distanceMatrix[endLocIndex][i] < shortestDistance){
 				shortestDistance = distanceMatrix[endLocIndex][i];
@@ -606,7 +608,7 @@ public class preciseSearch{
 		}
 	}
 
-	static double[][] readCoordinates(String path){
+	static double[][] readCoordinates(int coordLength, String path){
 		String sCurrentLine;
 		BufferedReader br = null;
 		ArrayList<String> list = new ArrayList<String>();
@@ -627,10 +629,16 @@ public class preciseSearch{
 		int n = list.size();
 		double[][] partMatrix = new double[n][2];
 		for(int i = 0; i < n; i++){
+			
+			//More or less hardcoding /fulhack
+			double dummy = coordLength;
+			double multiplier = Math.pow(10,(coordLength - 2));
+
+
 			String line = list.get(i);
 			String[] parts = line.split(",");
-			partMatrix[i][0] = Double.parseDouble(parts[0]);
-			partMatrix[i][1] = Double.parseDouble(parts[1]);
+			partMatrix[i][0] = Double.parseDouble(parts[0]) * multiplier;
+			partMatrix[i][1] = Double.parseDouble(parts[1]) * multiplier;
 		}
 	return partMatrix;
 
