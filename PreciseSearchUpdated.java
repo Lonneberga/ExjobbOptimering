@@ -39,7 +39,7 @@ public class PreciseSearchUpdated{
 
 	static void findSolution() {
 		int ratioLimit = 1000; //Based upon Maximum load on a trip divided by minimum distance. Multiplied by 10 for a safety margin.
-		int distanceLimit = 6000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
+		int distanceLimit = 60000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
 		//int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunktercopy.txt");
 		double[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/twenty.txt");
 
@@ -50,7 +50,7 @@ public class PreciseSearchUpdated{
 		//printMatrix(coordMatrix,n,2);
 
 		//Number of vehicles
-		int m = 1; 
+		int m = 7; 
 		
 		//Since JaCoP will optimize the route as well as it can it must be hindered to take a shortest route 
 		//that for example contains 0 cities.
@@ -58,14 +58,20 @@ public class PreciseSearchUpdated{
 		//int citiesToVisitNbr = (n-2)/m;
 		//System.out.println("Debug: " + citiesToVisitNbr);
 		//int citiesToVisitNbr = 5;
-		int leastAmountOfCities = 6; 
+		//int leastAmountOfCities = 9; 
+		int leastAmountOfCities = 20;
+		if(leastAmountOfCities > (n-2)){
+			System.out.println("leastAmountOfCities is too big. Program stopped.");
+			System.exit(0);
+		}
+		leastAmountOfCities = leastAmountOfCities + 2 * m; 
 
 
 		//Volume of load in cities.			
 		int[] volumes  = new int[n]; //Need to be Integers for sumWeight-constraint. Count as parts of a hundred.
 		
 		for(int i = 0; i < n; i++){
-			volumes[i] = 1;
+			volumes[i] = 100;
 		}
 
 
@@ -154,10 +160,10 @@ public class PreciseSearchUpdated{
 		}
 
 		//Matrix to represent which cities have been visited (element = 1) and not visited (element = 0)
-		IntVar[][] subCircuitMatrix = new IntVar[m][n];
+		BooleanVar[][] subCircuitMatrix = new BooleanVar[m][n];
 		for(int i = 0; i < m; i++){
 			for(int j = 0; j < n; j++){
-				subCircuitMatrix[i][j] = new IntVar(store, "subcircuitmatrix#" + Integer.toString(i) + Integer.toString(j),0,1);
+				subCircuitMatrix[i][j] = new BooleanVar(store, "subcircuitmatrix#" + Integer.toString(i) + Integer.toString(j),0,1);
 			}
 		}
 
@@ -175,8 +181,7 @@ public class PreciseSearchUpdated{
 			IntVar[] nextCityArray = nextCities[i];
 			//Impose Subcircuit-constraint on the array. 	
 			store.impose(new Subcircuit(nextCityArray));
-			//Impose Alldistinct-constraint on the array.
-			store.impose(new Alldiff(nextCityArray));
+			
 		}
 
 		//Input for SelectChoicePoint
@@ -217,7 +222,7 @@ public class PreciseSearchUpdated{
 		}
 
 		//Enforce that a certain amount of cities is visited in total.
-		IntVar visitedSum = new IntVar(store,"visitedSum",leastAmountOfCities,n);
+		IntVar visitedSum = new IntVar(store,"visitedSum",leastAmountOfCities,n * m);
 		PrimitiveConstraint sumVisitedCities = new SumInt(store,vehicleVisitedSumList,">=",visitedSum);
 		store.impose(sumVisitedCities);
 
@@ -541,27 +546,36 @@ public class PreciseSearchUpdated{
 		store.impose(division);
 
 		//Maximizing x is to minimize (-x)
-		FloatVar negRatio = new FloatVar(store,"negDivision", -ratioLimit,0.0);
+		FloatVar negRatio = new FloatVar(store,"negRatio", -ratioLimit,0.0);
 		Constraint negationConstraint = new PmulCeqR(ratio,-1, negRatio);
 
 		store.impose(negationConstraint);
 
+		for(int i = 0; i < m; i++){
+			//Construct the array for a specific vehicle
+			IntVar[] nextCityArray = nextCities[i];
+			
+			//Impose Alldistinct-constraint on the array.
+			store.impose(new Alldistinct(nextCityArray));
+		}
+
 
 		//Speshul Float Search
 		
-		
+		store.setLevel(store.level + 1);
+		//store.raiseLevelBeforeConsistency = true;
 		DepthFirstSearch<FloatVar> search = new DepthFirstSearch<FloatVar>();
-		SplitSelectFloat<FloatVar> select = new SplitSelectFloat<FloatVar>(store,varVectorDistance,new SmallestDomainFloat<FloatVar>());
+		SplitSelectFloat<FloatVar> select = new SplitSelectFloat<FloatVar>(store,varVectorDistance,new LargestMaxFloat<FloatVar>());
 		
 		//TimeOut
-		//search.setTimeOut(2);
+		search.setTimeOut(600);
 
 
 		//Search/Optimize
 		Optimize min = new Optimize(store,search,select,negRatio);  //Optimize(store,search,select); ? Arguments??
 
 
-
+		//store.setLevel(store.level + 1);
 		//boolean result = search.labeling(store,select);
 		boolean result = min.minimize();
 
@@ -574,8 +588,15 @@ public class PreciseSearchUpdated{
 			System.out.println("distance: " + totalDistance);
 			System.out.println("load: " + totalLoad);
 			
+		} else {
+			System.out.println("\n*** No");
+			System.out.println("Arrangment: "); 
+			printIntVarMatrix(nextCities,m,n); 
+			System.out.println("Ratio: " + ratio);
+			System.out.println("distance: " + totalDistance);
+			System.out.println("load: " + totalLoad);
 		}
-		else System.out.println("\n*** No");
+
 	}
 
 

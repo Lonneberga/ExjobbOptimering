@@ -40,7 +40,7 @@ public class SubcircuitNetworkUpdated{
 
 	static void findSolution() {
 		int ratioLimit = 1000; //Based upon Maximum load on a trip divided by minimum distance. Multiplied by 10 for a safety margin.
-		int distanceLimit = 6000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
+		int distanceLimit = 60000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
 		//int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunktercopy.txt");
 		/* 
 		Coordinates shall be on the form:
@@ -57,7 +57,7 @@ public class SubcircuitNetworkUpdated{
 
 
 		*/
-		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/ten.txt");
+		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/seventy.txt");
 
 		//Total number of cities
 		int n = coordMatrix.length;
@@ -70,7 +70,7 @@ public class SubcircuitNetworkUpdated{
 		//Number of vehicles at each depot. (translated into balance of source and sink)
 		//IF MORE THAN ONE DEPOT: FORCE SUBCIRCUIT-MATRIX TO BE EQUAL TO TO THE RIGHT AMOUNT IN EACH DEPOT
 		int[] vehicleNumbers = new int[depotNbr];
-		vehicleNumbers[0] = 1;
+		vehicleNumbers[0] = 5;
 		//vehicleNumbers[1] = 1;
 		//vehicleNumbers[2] = 
 
@@ -92,16 +92,22 @@ public class SubcircuitNetworkUpdated{
 		//int citiesToVisitNbr = (n-2)/m;
 		//System.out.println("Debug: " + citiesToVisitNbr);
 		//int citiesToVisitNbr = 20;
-		int leastAmountOfCities = 7; 
+		//int leastAmountOfCities = 13; 
 		//int leastAmountOfCities = 2;
+		int leastAmountOfCities = 70;
+		if(leastAmountOfCities > (n-2)){
+			System.out.println("leastAmountOfCities is too big. Program stopped.");
+			System.exit(0);
+		}
+		leastAmountOfCities = leastAmountOfCities + 2 * m; 
 
 		//Volume of load in cities
 		int[] volumes = new int[n];
 		for(int i = 0; i < regNbr; i++){
-			volumes[i] = 2;
+			volumes[i] = 100;
 		}
 
-		volumes[3] = 100;
+	
 		//volumes[6] = 0;
 
 		
@@ -112,10 +118,10 @@ public class SubcircuitNetworkUpdated{
 		//-----------------DEFINE THE STUFF FOR THE SUBCIRCUIT-ROUTES---------------------
 
 		//Matrix to represent which cities have been visited (element = 1) and not visited (element = 0)
-		IntVar[][] subCircuitMatrix = new IntVar[m][n];
+		BooleanVar[][] subCircuitMatrix = new BooleanVar[m][n];
 		for(int i = 0; i < m; i++){
 			for(int j = 0; j < n; j++){
-				subCircuitMatrix[i][j] = new IntVar(store, "subcircuitmatrix#" + Integer.toString(i) + Integer.toString(j),0,1);
+				subCircuitMatrix[i][j] = new BooleanVar(store, "subcircuitmatrix#" + Integer.toString(i) + Integer.toString(j),0,1);
 			}
 		}
 
@@ -130,8 +136,7 @@ public class SubcircuitNetworkUpdated{
 			IntVar[] nextCityArray = nextCities[i];
 			//Impose Subcircuit-constraint on the array. 	
 			store.impose(new Subcircuit(nextCityArray));
-			//Impose Alldistinct-constraint on the array.
-			store.impose(new Alldiff(nextCityArray));
+			
 		}
 
 		//Input for SelectChoicePoint
@@ -168,7 +173,7 @@ public class SubcircuitNetworkUpdated{
 		}
 
 		//Enforce that a certain amount of cities is visited in total.
-		IntVar visitedSum = new IntVar(store,"visitedSum",leastAmountOfCities,n);
+		IntVar visitedSum = new IntVar(store,"visitedSum",leastAmountOfCities,n * m);
 		PrimitiveConstraint sumVisitedCities = new SumInt(store,vehicleVisitedSumList,">=",visitedSum);
 		store.impose(sumVisitedCities);
 
@@ -340,7 +345,7 @@ public class SubcircuitNetworkUpdated{
 
 		//Construct IntVars for upper and lower capacity. These will also represent the flow over an arc.
 		//Each row get an extra space to be used in LinearInt later on.
-		IntVar[][] flowMatrix = new IntVar[n][n+1];
+		BooleanVar[][] flowMatrix = new BooleanVar[n][n+1];
 		for(int i = 0; i < n; i++){
 			for(int j = 0; j < n; j++){
 				boolean sameNode = (i != j); //
@@ -348,9 +353,9 @@ public class SubcircuitNetworkUpdated{
 				boolean	sourceNoIn = !(j >= regNbr && j < regNbr+depotNbr); //No arcs into source
 				boolean sinkNoOut =  !(i >= regNbr + depotNbr); // No arcs out of sink
 				if(sameNode && sourceSink && sourceNoIn && sinkNoOut){
-					flowMatrix[i][j] = new IntVar(store, i + "->" + j, 0,1);
+					flowMatrix[i][j] = new BooleanVar(store, i + "->" + j, 0,1);
 				}else{
-					flowMatrix[i][j] = new IntVar(store, i + "->" + j, 0,0);
+					flowMatrix[i][j] = new BooleanVar(store, i + "->" + j, 0,0);
 				}
 			}
 		}
@@ -359,7 +364,7 @@ public class SubcircuitNetworkUpdated{
 		int cost = 0;
 		Node nodeA = null;
 		Node nodeB = null;
-		IntVar flowBounds = null;
+		BooleanVar flowBounds = null;
 		for(int i =0; i < n; i++){ 
 			nodeA = nodeArray[i];
 			//System.out.println("Debug: " + nodeA);
@@ -407,23 +412,27 @@ public class SubcircuitNetworkUpdated{
 		//Update; city is visited <-> not has flow from it (and thereby to it). Only true for regular cities.
 		//Doing this I also constrain the Network nodes to have flow to exactly one other node or no other nodes. 
 		for(int i = 0; i < regNbr; i++){
-			IntVar[] nodeList = new IntVar[regNbr];
+			IntVar[] nodeList = new IntVar[n];
 			IntVar[] cityList = new IntVar[m];
 
-			for(int j = 0; j < regNbr;j++){
-				nodeList[j] = flowMatrix[i][j]; //Denna är symmetrisk så [j][i] vore samma sak.
+			for(int j = 0; j < n;j++){  //Utvidga till n? får den ha flow till något alls? 
+				nodeList[j] = flowMatrix[i][j]; 
 			}
 			for(int j = 0; j < m; j++){
 				cityList[j] = subCircuitMatrix[j][i]; //<--Detta är inget bra sätt att gå igenom en matris på, men det antas att kompilatorn fixar det.
 			}
 
-			IntVar nodeSum = new IntVar(store,"nodeSum" + i,0,1); 
-			IntVar citySum = new IntVar(store,"citySum" + i,0,1);  
+			BooleanVar nodeSum = new BooleanVar(store,"nodeSum" + i,0,1); 
+			BooleanVar citySum = new BooleanVar(store,"citySum" + i,0,1);  
 
 			store.impose(new SumInt(store,nodeList,"=",nodeSum));
 			store.impose(new SumInt(store,cityList,"=",citySum));
 
 
+			//Makes things weird.
+			store.impose(new XeqY(nodeSum,citySum));
+
+			
 		}
 
 
@@ -559,17 +568,25 @@ public class SubcircuitNetworkUpdated{
 		IntVar negIntRatio = new IntVar(store, "negIntRatio",-ratioLimit*multiplier,0);
 		store.impose(new XeqP(negIntRatio,negRatioMultiplied));
 
+		for(int i = 0; i < m; i++){
+			//Construct the array for a specific vehicle
+			IntVar[] nextCityArray = nextCities[i];
+			
+			//Impose Alldistinct-constraint on the array.
+			store.impose(new Alldistinct(nextCityArray));
+		}
+
 
 		
 		Search<IntVar> label = new DepthFirstSearch<IntVar>();
 
 		//Time out
-		//label.setTimeOut(10);
+		label.setTimeOut(600);
 
-		SelectChoicePoint<IntVar> selectOne = new SimpleSelect<IntVar>(varVectorDistance,new MaxRegret<IntVar>(),new IndomainMin<IntVar>());
+		SelectChoicePoint<IntVar> selectOne = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
 
 
-
+		store.setLevel(store.level + 1);
 
 		boolean resultOne = label.labeling(store,selectOne,negIntRatio);
 		//boolean resultOne = label.labeling(store,selectOne);
@@ -586,6 +603,7 @@ public class SubcircuitNetworkUpdated{
 			System.out.println("distance: " + totalDistance);
 			System.out.println("load: " + totalLoad);
 			//printIntVarMatrix(flowMatrix,n,n);
+			
 			
 		}
 		else {

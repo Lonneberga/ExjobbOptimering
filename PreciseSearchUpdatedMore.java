@@ -17,12 +17,12 @@ import org.jacop.floats.constraints.XeqP;
 import org.jacop.floats.constraints.PmulCeqR;
 import org.jacop.floats.constraints.XeqP;
 import org.jacop.constraints.ElementInteger;
+import org.jacop.floats.search.*;
+import java.lang.Math;
 
 
-
-
-public class combinedSearchUpdated{
-
+public class PreciseSearchUpdatedMore{
+  
 
 	public static void main(String[] args) {
 		System.out.println("running....");
@@ -41,16 +41,16 @@ public class combinedSearchUpdated{
 		int ratioLimit = 1000; //Based upon Maximum load on a trip divided by minimum distance. Multiplied by 10 for a safety margin.
 		int distanceLimit = 60000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
 		//int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunktercopy.txt");
-		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/seventy.txt");
+		double[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/seventy.txt");
 
 		//Total number of cities
 		int n = coordMatrix.length;
-		int[][] distanceMatrix = distanceMatrix(coordMatrix);
+		double[][] distanceMatrix = distanceMatrix(coordMatrix);
 		//printMatrix(distanceMatrix,n,n);
 		//printMatrix(coordMatrix,n,2);
 
 		//Number of vehicles
-		int m = 5; 
+		int m = 1; 
 		
 		//Since JaCoP will optimize the route as well as it can it must be hindered to take a shortest route 
 		//that for example contains 0 cities.
@@ -58,21 +58,22 @@ public class combinedSearchUpdated{
 		//int citiesToVisitNbr = (n-2)/m;
 		//System.out.println("Debug: " + citiesToVisitNbr);
 		//int citiesToVisitNbr = 5;
+		//int leastAmountOfCities = 9; 
 		int leastAmountOfCities = 70;
 		if(leastAmountOfCities > (n-2)){
 			System.out.println("leastAmountOfCities is too big. Program stopped.");
 			System.exit(0);
 		}
-		leastAmountOfCities = leastAmountOfCities + 2 * m;
-
+		leastAmountOfCities = leastAmountOfCities + 2 * m; 
 
 
 		//Volume of load in cities.			
-		int[] volumes  = new int[n]; 
+		int[] volumes  = new int[n]; //Need to be Integers for sumWeight-constraint. Count as parts of a hundred.
+		
 		for(int i = 0; i < n; i++){
 			volumes[i] = 100;
 		}
-		
+
 
 		
 
@@ -115,11 +116,11 @@ public class combinedSearchUpdated{
 		be represented as an Integer.*/
 
 		//For each city declare an upper limit of how full it's volume is allowed to be. Represented with a list.
-		int[] maxVolumes = new int[n];
+		double[] maxVolumes = new double[n];
 
 		//Default: no restriction.
 		for(int j = 0; j < n; j++){
-			maxVolumes[j] = 101;
+			maxVolumes[j] = 1.1;
 		}
 
 		//Test
@@ -180,15 +181,16 @@ public class combinedSearchUpdated{
 			IntVar[] nextCityArray = nextCities[i];
 			//Impose Subcircuit-constraint on the array. 	
 			store.impose(new Subcircuit(nextCityArray));
-			//Impose Alldistinct-constraint on the array.
-			//store.impose(new Alldistinct(nextCityArray));
+			
 		}
 
 		//Input for SelectChoicePoint
-		IntVar[] varVector = new IntVar[m*n];
+		FloatVar[] varVector = new FloatVar[m*n];
 		for(int i = 0; i < m; i++){
-			for(int j = 0; j < n; j++){
-				varVector[i * n + j] = nextCities[i][j];
+			for(int j = 0; j < n; j++){	
+				varVector[i * n + j] = new FloatVar(store,"floatNextCity",1.0,n);
+				Constraint conv = new XeqP(nextCities[i][j],varVector[i * n + j]);
+				store.impose(conv);
 			}
 		}
 		
@@ -224,7 +226,6 @@ public class combinedSearchUpdated{
 		PrimitiveConstraint sumVisitedCities = new SumInt(store,vehicleVisitedSumList,">=",visitedSum);
 		store.impose(sumVisitedCities);
 
-
 		//Enforce that the sum of a column in the subCircuit-matrix is not greater than 1.
 		//This translates to a city being visited by at most one vehicle.
 		int[] columnWeights = new int[m];
@@ -245,26 +246,78 @@ public class combinedSearchUpdated{
 		
 		//For each vehicle; calculate the load: load = sum(c*x), where c(i) is the load in a certain town i and x=0 if the town has not been visited and x=1 if it has been visited.
 	
-		//Store the load for each vehicle.
-		IntVar[] vehicleLoads = new IntVar[m];
-		
 		/*
+		//Store the load for each vehicle. (extra space to use in LinearFloat)
+		FloatVar[] vehicleLoads = new FloatVar[m+1];
 		//Make a matrix where an element is the product of boolean whether a city is visited and that cities volume. Row: Vehicle, Column; city
 		//Initialize
-		IntVar[][] cityVisitedLoad = new IntVar[m][n];
+		//This has an extra column which is used in LinearFloat later.
+		FloatVar[][] cityVisitedLoad = new FloatVar[m][n+1];
 		for(int i = 0;i < m; i++){
 			for(int j = 0; j < n; j++){
-				cityVisitedLoad[i][j] = new IntVar(store,"cityVisitedLoad#" + Integer.toString(i) +","+ Integer.toString(j), 0,100);
+				cityVisitedLoad[i][j] = new FloatVar(store,"cityVisitedLoad#" + Integer.toString(i) +","+ Integer.toString(j), 0.0,1.0);
 			}
 		}
-
 		//Make constraints
 		for(int i =0; i < m; i++){
 			for(int j = 0; j < n; j++){
-				Constraint ctr = new XmulCeqZ(subCircuitMatrix[i][j],volumes[j], cityVisitedLoad[i][j]);
+
+
+				//------------gör om IntVar till FloatVar för att få in i metod
+				FloatVar subCircuitElementFloat = new FloatVar(store,"subCiruitElementAsFloat",0.0,1.0);
+				Constraint conv = new XeqP(subCircuitMatrix[i][j], subCircuitElementFloat);
+				//Viktigt att inte göra något annant med subCircuitElement då det skulle påverka subCircuitMatrix
+				store.impose(conv);
+
+				Constraint ctr = new PmulCeqR(subCircuitElementFloat,volumes[j], cityVisitedLoad[i][j]);
 				store.impose(ctr);
 			}
-		}*/
+		}
+
+		//Volume for a certain vehicle
+		for(int i = 0; i < m; i++){
+			FloatVar[] list = cityVisitedLoad[i];
+
+			FloatVar vehicleLoad = new FloatVar(store,"vehicleLoad#" + Integer.toString(i),0.0,n);  //Upper limit of vehicle load here.  (Defualt: 100% of each cities load, If there is a limit to how many cities could be visited then that value should replace n.)
+			//Fill the empty spot with vehcileLoad
+			list[n] = vehicleLoad;
+
+			//Build an array of weights.
+			double[] weights = new double[n+1];
+			for(int j = 0; j < n; j++){
+				weights[j] = 1;
+			}
+			weights[n] = -1;
+
+
+			Constraint sumWeight = new LinearFloat(store,list,weights,"==",0);
+			
+
+			store.impose(sumWeight);
+			vehicleLoads[i] = vehicleLoad;
+		}
+		
+
+		//Sum up the vehicles load to a total load.
+		FloatVar totalLoad = new FloatVar(store,"totalLoad",0.0,n);
+
+		//Setup for Linear Float
+		double[] weights = new double[m+1];
+		for(int i = 0; i < m; i++){
+			weights[i] = 1;
+		}
+		weights[m] = -1;
+
+		vehicleLoads[m] = totalLoad;
+
+		Constraint totSum = new LinearFloat(store,vehicleLoads,weights,"==",0);
+		//store.impose(new SumInt(store,vehicleLoads,weights"==",0));
+		store.impose(totSum);
+		*/
+
+		//Store the load for each vehicle.
+		IntVar[] vehicleLoads = new IntVar[m];
+		
 
 		//Volume for a certain vehicle
 		for(int i = 0; i < m; i++){
@@ -281,22 +334,27 @@ public class combinedSearchUpdated{
 		IntVar totalLoad = new IntVar(store,"totalLoad",0,(100*n));
 		store.impose(new SumInt(store,vehicleLoads,"==",totalLoad));
 
+		//Float special.
+		FloatVar totalLoadFloat = new FloatVar(store,"totalLoad",0.0,100*n);
+		store.impose(new XeqP(totalLoad,totalLoadFloat));
 
-		//Initialize a variable vector for distance
-		IntVar[] varVectorDistance = new IntVar[m*n];
+
+
+		//Initialize a variable vector for distance. (Här ändrat från IntVar till FloatVar, skillnad i sökning?)
+		FloatVar[] varVectorDistance = new FloatVar[m*n];
 
 		//Calculate the distance traveled by the vehicles.
-		IntVar[] vehicleDistanceArray = new IntVar[m];
+		FloatVar[] vehicleDistanceArray = new FloatVar[m+1];
 		for(int i = 0; i < m; i++){
-			IntVar[] cityDistanceArray = new IntVar[n];
+			FloatVar[] cityDistanceArray = new FloatVar[n+1];
 			for(int j = 0; j < n; j++){
 				IntVar nextCity = nextCities[i][j];
-				int[] distanceRow = distanceMatrix[j]; //Distance to different cities for city j.
+				double[] distanceRow = distanceMatrix[j]; //Distance to different cities for city j.
 				
-				IntVar cityDistance = new IntVar(store,"cityDistance",0,distanceLimit); 
+				FloatVar cityDistance = new FloatVar(store,"cityDistance",0.0,distanceLimit); 
 				//Constraint ctr = new Element(nextCity,distanceRow,cityDistance,-1); 
 				//Constraint ctr = new Element(nextCity,distanceRow,cityDistance); 
-				Constraint ctr = new ElementInteger(nextCity,distanceRow,cityDistance,0); 
+				Constraint ctr = new ElementFloat(nextCity,distanceRow,cityDistance,0); 
 				store.impose(ctr);
 				cityDistanceArray[j] = cityDistance;
 
@@ -304,14 +362,41 @@ public class combinedSearchUpdated{
 				varVectorDistance[i * n + j] = cityDistance; 
 
 			}
-			IntVar vehicleDistance = new IntVar(store,"vehicleDistance",0,n * distanceLimit); 
-			Constraint sumCtr = new SumInt(store,cityDistanceArray,"==",vehicleDistance);
+			FloatVar vehicleDistance = new FloatVar(store,"vehicleDistance",0.0,n * distanceLimit); 
+
+			//Construct array with weights
+			double[] weightsA = new double[n+1];
+			for(int j = 0; j < n; j++){
+				weightsA[j] = 1;
+			}
+			weightsA[n] = -1;
+
+			//Add the sum-variable to enforce the following type of relation:
+			//w1 · x1 + w2 · x2 + · · · + (−1) · s = 0.
+			cityDistanceArray[n] = vehicleDistance;
+
+			
+			Constraint sumCtr = new LinearFloat(store,cityDistanceArray,weightsA,"==",0);
+			//Constraint sumCtr = new SumInt(store,[cityDistanceArray,weights,"==",vehicleDistance);
 			store.impose(sumCtr);
 			vehicleDistanceArray[i] = vehicleDistance;
 		}
 
-		IntVar totalDistance = new IntVar(store,"totalDistance",0,m * n * distanceLimit);
-		Constraint totalSumCtr = new SumInt(store,vehicleDistanceArray,"==",totalDistance);
+		FloatVar totalDistance = new FloatVar(store,"totalDistance",0.0,m * n * distanceLimit);
+		//Construct array with weights
+		double[] weightsB = new double[m+1];
+		for(int i = 0; i < m; i++){
+			weightsB[i] = 1;
+		}
+		weightsB[m] = -1;
+		
+		//Add the sum-variable to enforce the following type of relation:
+		//w1 · x1 + w2 · x2 + · · · + (−1) · s = 0.
+		vehicleDistanceArray[m] = totalDistance;
+		
+
+		Constraint totalSumCtr = new LinearFloat(store,vehicleDistanceArray,weightsB,"==",0);
+		//Constraint totalSumCtr = new SumInt(store,vehicleDistanceArray,"==",totalDistance);
 		store.impose(totalSumCtr);
 
 
@@ -326,12 +411,12 @@ public class combinedSearchUpdated{
 		//Take notice of the city indices!
 		for(int city : visitDueToTime){
 			IntVar[] vehicles = new IntVar[m];
-			int[] weights = new int[m];
+			int[] weightsC = new int[m];
 			for(int i = 0; i < m ; i++){
 				vehicles[i] = subCircuitMatrix[i][city];
-				weights[i] = 1; 
+				weightsC[i] = 1; 
 			}
-			PrimitiveConstraint visitCtr = new LinearInt(store,vehicles,weights,"=",1);
+			PrimitiveConstraint visitCtr = new LinearInt(store,vehicles,weightsC,"=",1);
 			store.impose(visitCtr);
 		}
 
@@ -349,11 +434,11 @@ public class combinedSearchUpdated{
 		for(int i = 0; i < m; i++){
 			IntVar[] list = subCircuitMatrix[i];
 			//Enforce a minimum amount of visited cites per vehicle, or a range (lower bound, upper bound)
-			int[] weights = new int[n];
+			int[] weightsD = new int[n];
 			for(int k = 0; k < n; k++){
-				weights[k] = 1;
+				weightsD[k] = 1;
 			}
-			PrimitiveConstraint ub = new LinearInt(store,list,weights,"<=",mostAmountofcities);
+			PrimitiveConstraint ub = new LinearInt(store,list,weightsD,"<=",mostAmountofcities);
 			store.impose(ub);
 		}
 
@@ -367,12 +452,12 @@ public class combinedSearchUpdated{
 			if(volumes[j] + buffer >= maxVolumes[j]){
 				//System.out.println("Debug maxVolume:" + j + "     volume:" + volumes[j] + "    maxvolume:   " + maxVolumes[j]);
 				IntVar[] vehicles = new IntVar[m];
-				int[] weights = new int[m];
+				int[] weightsE = new int[m];
 				for(int i = 0; i < m ; i++){
 					vehicles[i] = subCircuitMatrix[i][j];
-					weights[i] = 1; 
+					weightsE[i] = 1; 
 				}	
-				PrimitiveConstraint volCtr = new LinearInt(store,vehicles,weights,"=",1);
+				PrimitiveConstraint volCtr = new LinearInt(store,vehicles,weightsE,"=",1);
 				store.impose(volCtr);
 			}
 		}
@@ -382,12 +467,12 @@ public class combinedSearchUpdated{
 		//Every vehicle must visit exactly one such city.
 		for(int i = 0; i < m; i++){
 			IntVar[] startCities = new IntVar[startNbr];
-			int[] weights = new int[startNbr];
+			int[] weightsF = new int[startNbr];
 			for(int j = regNbr; j < regNbr + startNbr; j++){
 				startCities[j-regNbr] = subCircuitMatrix[i][j];
-				weights[j-regNbr] = 1;
+				weightsF[j-regNbr] = 1;
 			}
-			PrimitiveConstraint startConstraint = new LinearInt(store,startCities,weights,"=",1);
+			PrimitiveConstraint startConstraint = new LinearInt(store,startCities,weightsF,"=",1);
 			store.impose(startConstraint);
 		}
 
@@ -451,37 +536,21 @@ public class combinedSearchUpdated{
 
 		//Optimize
 
-		//Convert to Float for division
-		FloatVar floatTotalLoad = new FloatVar(store,"floatTotalLoad",0,(100*n));
-		Constraint convLoad = new XeqP(totalLoad, floatTotalLoad);
-		store.impose(convLoad);
+		
 
 		
-		FloatVar ratio = new FloatVar(store,"ratio",0,ratioLimit);
-		FloatVar floatTotalDistance = new FloatVar(store,"floatTotalDistance",0,m * n * distanceLimit);
-		//Convert to Float for division
-		Constraint convertDist = new XeqP(totalDistance, floatTotalDistance);
-		store.impose(convertDist); 
-		Constraint division = new PdivQeqR(floatTotalLoad, floatTotalDistance, ratio);
+		FloatVar ratio = new FloatVar(store,"ratio",0.0,ratioLimit);
+
+		Constraint division = new PdivQeqR(totalLoadFloat, totalDistance, ratio);
 
 		store.impose(division);
 
 		//Maximizing x is to minimize (-x)
-		FloatVar negRatio = new FloatVar(store,"negDivision", -ratioLimit,0);
+		FloatVar negRatio = new FloatVar(store,"negRatio", -ratioLimit,0.0);
 		Constraint negationConstraint = new PmulCeqR(ratio,-1, negRatio);
+
 		store.impose(negationConstraint);
 
-		//Multiply for precision
-		int multiplier = 100;
-		FloatVar negRatioMultiplied = new FloatVar(store,"negDivisionMultiplied",-ratioLimit * multiplier,0);
-		Constraint multiplyRatio = new PmulCeqR(negRatio,multiplier,negRatioMultiplied);
-		store.impose(multiplyRatio);
-
-		//Make into IntVar
-		IntVar negIntRatio = new IntVar(store, "negIntRatio",-ratioLimit*multiplier,0);
-		store.impose(new XeqP(negIntRatio,negRatioMultiplied));
-
-		
 		for(int i = 0; i < m; i++){
 			//Construct the array for a specific vehicle
 			IntVar[] nextCityArray = nextCities[i];
@@ -490,31 +559,39 @@ public class combinedSearchUpdated{
 			store.impose(new Alldistinct(nextCityArray));
 		}
 
-		//store.setLevel(store.level + 1);
-		//store.setLevel(store.level + 1);
-		System.out.println(store.level);
-		Search<IntVar> label = new DepthFirstSearch<IntVar>();
 
-		//Timeout
-		label.setTimeOut(600);
+		//Speshul Float Search
+		
+		DepthFirstSearch<FloatVar> master = new DepthFirstSearch<FloatVar>();
+		DepthFirstSearch<FloatVar> slave = new DepthFirstSearch<FloatVar>();
 
-		//This is where var,varSelect,tieBreakerVarSelect & indomain are decided
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVector,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		//SelectChoicePoint<IntVar> selectTwo = new SimpleSelect<IntVar>(varVector,new MaxRegret<IntVar>(),new IndomainMin<IntVar>());
-					
-		//Stuff for varVectorDistance
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		SelectChoicePoint<IntVar> selectOne = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
+		master.setTimeOut(600);
+
+		
+		SplitSelectFloat<FloatVar> selectMaster = new SplitSelectFloat<FloatVar>(store,varVectorDistance,new LargestMaxFloat<FloatVar>());
+		SplitSelectFloat<FloatVar> selectSlave = new SplitSelectFloat<FloatVar>(store,varVector,new LargestMaxFloat<FloatVar>());
+
+		slave.setSelectChoicePoint(selectSlave);
+		master.addChildSearch(slave);
+		slave.setOptimize(true);
 
 
 		store.setLevel(store.level + 1);
-		//store.raiseLevelBeforeConsistency = true;
-		//boolean result = label.labeling(store,select,negIntRatio);
-		boolean resultOne = label.labeling(store,selectOne,negIntRatio);
-		//boolean resultTwo = label.labeling(store,selectTwo,negIntRatio);
+		
+		//boolean resultOne = master.labeling(store,selectMaster,negIntRatio);
 
 
-		if (resultOne) {
+
+		//Search/Optimize
+		Optimize min = new Optimize(store,master,selectMaster,negRatio);  //Optimize(store,search,select); ? Arguments??
+
+
+		//store.setLevel(store.level + 1);
+		//boolean result = search.labeling(store,select);
+		boolean result = min.minimize();
+
+
+		if (result) {
 			System.out.println("\n*** Yes");
 			System.out.println("Arrangment: "); 
 			printIntVarMatrix(nextCities,m,n); 
@@ -522,17 +599,24 @@ public class combinedSearchUpdated{
 			System.out.println("distance: " + totalDistance);
 			System.out.println("load: " + totalLoad);
 			
+		} else {
+			System.out.println("\n*** No");
+			System.out.println("Arrangment: "); 
+			printIntVarMatrix(nextCities,m,n); 
+			System.out.println("Ratio: " + ratio);
+			System.out.println("distance: " + totalDistance);
+			System.out.println("load: " + totalLoad);
 		}
-		else System.out.println("\n*** No");
+
 	}
 
 
 //------------------------------------------------------Other methods------------------------------------------------------------------------	
 
 
-	static int findShortest(int endLocIndex,int indexOfFirstStartLoc,int nbrOfStartLocs,int[][] distanceMatrix){
+	static int findShortest(int endLocIndex,int indexOfFirstStartLoc,int nbrOfStartLocs,double[][] distanceMatrix){
 		int shortest = 0;
-		int shortestDistance = Integer.MAX_VALUE;
+		double shortestDistance = Double.MAX_VALUE;
 		for(int i = indexOfFirstStartLoc; i < (indexOfFirstStartLoc + nbrOfStartLocs); i++){
 			if(distanceMatrix[endLocIndex][i] < shortestDistance){
 				shortestDistance = distanceMatrix[endLocIndex][i];
@@ -546,7 +630,7 @@ public class combinedSearchUpdated{
 
 	//Input: n x 2 matris.
 	//Give input as ints. 
- 	static int[][] distanceMatrix(int[][] input){
+ 	static double[][] distanceMatrix(double[][] input){
  		//Debug
  		int debug = 0;
 
@@ -555,23 +639,23 @@ public class combinedSearchUpdated{
 			System.exit(1);
 		}
 		int n = input.length;
-		int distanceMatrix[][] = new int[n][n];
-		int distance;  
+		double[][] distanceMatrix = new double[n][n];
+		double distance;  
 		for(int i = 0; i < n; i++){
-			int x1 = input[i][0]; 
-			int y1 = input[i][1];
+			double x1 = input[i][0]; 
+			double y1 = input[i][1];
 
 			for(int j = 0; j < n; j++){
-				int x2 = input[j][0];
-				int y2 = input[j][1];
-				int deltaX = Math.abs(x1 - x2);
-				int deltaY = Math.abs(y1 - y2);
+				double x2 = input[j][0];
+				double y2 = input[j][1];
+				double deltaX = Math.abs(x1 - x2);
+				double deltaY = Math.abs(y1 - y2);
 				if(deltaX > 46340 || deltaY > 46340 || ((deltaX*deltaX) + (deltaY * deltaY))<0){ //overflow from deltaX * deltaX, deltaY * deltaY, sum of those products
 					System.out.print("Overflow. To big distances between cities.");
 					System.exit(1);
 				}
-				int squaredSum = (deltaX*deltaX) + (deltaY * deltaY);
-				distance = Math.round(Math.round(Math.sqrt(squaredSum)));
+				double squaredSum = (deltaX*deltaX) + (deltaY * deltaY);
+				distance = Math.sqrt(squaredSum);
 
 				distanceMatrix[i][j] = distance;
 			}
@@ -591,7 +675,7 @@ public class combinedSearchUpdated{
 		}
 	}
 
-	static void printMatrix(int[][] matrix, int row, int column){
+	static void printMatrix(double[][] matrix, int row, int column){
 		for(int i = 0; i < row; i++){
 			for(int j = 0; j < column; j++){
 				System.out.printf("%-15s", matrix[i][j]);
@@ -600,7 +684,7 @@ public class combinedSearchUpdated{
 		}
 	}
 
-	static int[][] readCoordinates(int coordLength,String path){
+	static double[][] readCoordinates(int coordLength, String path){
 		String sCurrentLine;
 		BufferedReader br = null;
 		ArrayList<String> list = new ArrayList<String>();
@@ -619,27 +703,18 @@ public class combinedSearchUpdated{
 		}
 
 		int n = list.size();
-		int[][] partMatrix = new int[n][2];
+		double[][] partMatrix = new double[n][2];
 		for(int i = 0; i < n; i++){
+			
+			//More or less hardcoding /fulhack
+			double dummy = coordLength;
+			double multiplier = Math.pow(10,(coordLength - 2));
+
+
 			String line = list.get(i);
 			String[] parts = line.split(",");
-			String[] longitude = (parts[0]).split("\\.");
-			String[] latitude = parts[1].split("\\.");
-			parts[0] = longitude[0] + longitude[1];
-			parts[1] = latitude[0] + latitude[1];
-			//Make long enough
-			while(parts[0].length() < coordLength){
-				parts[0] = parts[0] + "0";
-			}
-			while(parts[1].length() < coordLength){
-				parts[1] = parts[1] + "0";
-			}
-
-			//Make short enough
-			parts[0] = parts[0].substring(0,coordLength);
-			parts[1] = parts[1].substring(0,coordLength);
-			partMatrix[i][0] = Integer.parseInt(parts[0]);
-			partMatrix[i][1] = Integer.parseInt(parts[1]);
+			partMatrix[i][0] = Double.parseDouble(parts[0]) * multiplier;
+			partMatrix[i][1] = Double.parseDouble(parts[1]) * multiplier;
 		}
 	return partMatrix;
 

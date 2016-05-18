@@ -21,7 +21,7 @@ import org.jacop.constraints.ElementInteger;
 
 
 
-public class combinedSearchUpdated{
+public class combinedSearchUpdatedMore{
 
 
 	public static void main(String[] args) {
@@ -50,7 +50,7 @@ public class combinedSearchUpdated{
 		//printMatrix(coordMatrix,n,2);
 
 		//Number of vehicles
-		int m = 5; 
+		int m = 1; 
 		
 		//Since JaCoP will optimize the route as well as it can it must be hindered to take a shortest route 
 		//that for example contains 0 cities.
@@ -493,25 +493,29 @@ public class combinedSearchUpdated{
 		//store.setLevel(store.level + 1);
 		//store.setLevel(store.level + 1);
 		System.out.println(store.level);
-		Search<IntVar> label = new DepthFirstSearch<IntVar>();
+		
 
 		//Timeout
-		label.setTimeOut(600);
+		
 
-		//This is where var,varSelect,tieBreakerVarSelect & indomain are decided
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVector,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		//SelectChoicePoint<IntVar> selectTwo = new SimpleSelect<IntVar>(varVector,new MaxRegret<IntVar>(),new IndomainMin<IntVar>());
-					
-		//Stuff for varVectorDistance
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		SelectChoicePoint<IntVar> selectOne = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
+		Search<IntVar> master = new DepthFirstSearch<IntVar>();
+		Search<IntVar> slave = new DepthFirstSearch<IntVar>();
+
+		master.setTimeOut(600);
+
+		
+		SelectChoicePoint<IntVar> selectMaster = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
+		SelectChoicePoint<IntVar> selectSlave = new SimpleSelect<IntVar>(varVector,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
+
+		slave.setSelectChoicePoint(selectSlave);
+		master.addChildSearch(slave);
+		slave.setOptimize(true);
 
 
 		store.setLevel(store.level + 1);
-		//store.raiseLevelBeforeConsistency = true;
-		//boolean result = label.labeling(store,select,negIntRatio);
-		boolean resultOne = label.labeling(store,selectOne,negIntRatio);
-		//boolean resultTwo = label.labeling(store,selectTwo,negIntRatio);
+		
+		boolean resultOne = master.labeling(store,selectMaster,negIntRatio);
+		
 
 
 		if (resultOne) {

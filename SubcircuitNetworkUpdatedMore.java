@@ -17,12 +17,13 @@ import org.jacop.floats.constraints.XeqP;
 import org.jacop.floats.constraints.PmulCeqR;
 import org.jacop.floats.constraints.XeqP;
 import org.jacop.constraints.ElementInteger;
+import org.jacop.constraints.netflow.NetworkBuilder;
+import org.jacop.constraints.netflow.simplex.Node;
+import org.jacop.constraints.netflow.NetworkFlow;
 
 
 
-
-public class combinedSearchUpdated{
-
+public class SubcircuitNetworkUpdatedMore{	
 
 	public static void main(String[] args) {
 		System.out.println("running....");
@@ -41,122 +42,80 @@ public class combinedSearchUpdated{
 		int ratioLimit = 1000; //Based upon Maximum load on a trip divided by minimum distance. Multiplied by 10 for a safety margin.
 		int distanceLimit = 60000; //Based upon the distance between cities in Sweden. (Most northern to most southern and most western to most eastern). Unit of length is  
 		//int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/testpunktercopy.txt");
+		/* 
+		Coordinates shall be on the form:
+		Regular node
+		Regular node
+		Regular node
+		Regular node
+		Regular node
+		Regular node
+		DepotA source
+		DepotB source
+		DepotA sink 
+		DepotB sink
+
+
+		*/
 		int[][] coordMatrix = readCoordinates(5,"/Users/Emil/Documents/exjobb/koordinater/actual/seventy.txt");
 
 		//Total number of cities
 		int n = coordMatrix.length;
 		int[][] distanceMatrix = distanceMatrix(coordMatrix);
-		//printMatrix(distanceMatrix,n,n);
-		//printMatrix(coordMatrix,n,2);
 
-		//Number of vehicles
-		int m = 5; 
+		//Number of depots (or start locations if the number of end locations is greater than zero).
+		//This will be the number of sources.
+		int depotNbr = 1;
+
+		//Number of vehicles at each depot. (translated into balance of source and sink)
+		//IF MORE THAN ONE DEPOT: FORCE SUBCIRCUIT-MATRIX TO BE EQUAL TO TO THE RIGHT AMOUNT IN EACH DEPOT
+		int[] vehicleNumbers = new int[depotNbr];
+		vehicleNumbers[0] = 5;
+		//vehicleNumbers[1] = 1;
+		//vehicleNumbers[2] = 
+
+
+		//Total number of vehicles
+		int m = 0;
+		for(int i = 0; i < vehicleNumbers.length; i++){
+			m += vehicleNumbers[i];
+		}
+
 		
-		//Since JaCoP will optimize the route as well as it can it must be hindered to take a shortest route 
-		//that for example contains 0 cities.
-		//Least amount of visited cities for a certain vehicle. 
+
+
+		//Number of regular cities.
+		int regNbr = n - 2 * depotNbr;
+
+		//Least amount of cities that must be visited
+		
 		//int citiesToVisitNbr = (n-2)/m;
 		//System.out.println("Debug: " + citiesToVisitNbr);
-		//int citiesToVisitNbr = 5;
+		//int citiesToVisitNbr = 20;
+		//int leastAmountOfCities = 13; 
+		//int leastAmountOfCities = 2;
 		int leastAmountOfCities = 70;
 		if(leastAmountOfCities > (n-2)){
 			System.out.println("leastAmountOfCities is too big. Program stopped.");
 			System.exit(0);
 		}
-		leastAmountOfCities = leastAmountOfCities + 2 * m;
+		leastAmountOfCities = leastAmountOfCities + 2 * m; 
 
-
-
-		//Volume of load in cities.			
-		int[] volumes  = new int[n]; 
-		for(int i = 0; i < n; i++){
+		//Volume of load in cities
+		int[] volumes = new int[n];
+		for(int i = 0; i < regNbr; i++){
 			volumes[i] = 100;
 		}
-		
+
+	
+		//volumes[6] = 0;
 
 		
 
-		//Declare a store to put constraints into.
 		Store store = new Store();
 
 
-
-
-		//Data for side constraints.----------------------------------------------------------------------------------------
-
-		//Side constraint #1: How often a city must be visited at minimum.
-
-		/*Comment: I imagine that this would be dependent on querying a database to check for the latest date the city was visited.
-		this date is then compared to the current date. If the difference is larger than a set period of time the city must be visited.
-		I will represent this with a list of cities that need to be visited. If it's empty then no citys have to be visited due to time.*/ 
-
-		//Take notice of the city indexes!
-		ArrayList<Integer> visitDueToTime = new ArrayList<Integer>();
-		//Test (stadindex 3 = stad nr 4 ty stadindex 0 är första staden)
-		//visitDueToTime.add(3);
-		//visitDueToTime.add(7);
-		//visitDueToTime.add(8);
-		//visitDueToTime.add(9);
-		//Add cities that need to be visited to this list.
-
-		//Side constraint #2: How long a route can be in units of length.
-		int hardDistanceLimit = 2;
-
-		//Side constraint #3: How many cities a certain vehicle route can contain at most.
-		int mostAmountofcities = n; //n by default.
-
-		/*Comment: This will probably most of the time be an unnecessary constraint as the optimization will almost always keep the
-		number of visited cities equal to the lowest number allowed */
-
-
-		//Side constraint #4: How full a cities volume can be at most.
-
-		/*Comment: The input for this is given as a float, but it will have to be rounded of to parts of hundreds (or thousands or...) and 
-		be represented as an Integer.*/
-
-		//For each city declare an upper limit of how full it's volume is allowed to be. Represented with a list.
-		int[] maxVolumes = new int[n];
-
-		//Default: no restriction.
-		for(int j = 0; j < n; j++){
-			maxVolumes[j] = 101;
-		}
-
-		//Test
-		//maxVolumes[3] = 50;
-
-		/*Depending on the definition of the side constraint (Do the limit mean that the city ABSOLUTELY SHALL NEVER have bigger volume than
-		the limit OR does it mean if the limit is broken the city should be visited as soon as possible?) one might want to have a variable
-		for a buffer*/
-		int buffer = 0;	
-
-		//Side constraint #5: Enforce a specific "special-city" where vehicles start from/or end up. Does not contain a load.
-
-
-		int startNbr = 1;
-
-
-		/*Comment: It's effectively the same thing to enforce only start city or only end city.*/
-
-		//Side constraint #6: Enforce two specific "special-cities" one where vehicles start from and another where they end up. Does not contain a load.
-		int endNbr = 1;
-		
-
-
-
-
-
-
-
-		//------------------------------------------------------------------------------------------------------------------
-
-		//Number of regular cities
-		int regNbr = n - startNbr - endNbr;
-
-		//Fix volume in start- and end locations.
-		for(int i = regNbr; i < n; i++){
-			volumes[i] = 0;
-		}
+		//-----------------DEFINE THE STUFF FOR THE SUBCIRCUIT-ROUTES---------------------
 
 		//Matrix to represent which cities have been visited (element = 1) and not visited (element = 0)
 		BooleanVar[][] subCircuitMatrix = new BooleanVar[m][n];
@@ -166,9 +125,6 @@ public class combinedSearchUpdated{
 			}
 		}
 
-		//Subcircuit constraints, one per vehicle.
-
-		
 		//Store the circuit-arrays. Each row in matrix nextCities is a circuit-array.
 		IntVar[][] nextCities = new IntVar[m][n];
 
@@ -180,8 +136,7 @@ public class combinedSearchUpdated{
 			IntVar[] nextCityArray = nextCities[i];
 			//Impose Subcircuit-constraint on the array. 	
 			store.impose(new Subcircuit(nextCityArray));
-			//Impose Alldistinct-constraint on the array.
-			//store.impose(new Alldistinct(nextCityArray));
+			
 		}
 
 		//Input for SelectChoicePoint
@@ -191,7 +146,6 @@ public class combinedSearchUpdated{
 				varVector[i * n + j] = nextCities[i][j];
 			}
 		}
-		
 
 		//Link the nextCities elements to the subCircuitMatrix elements.
 		for(int i = 0; i < m; i++){
@@ -201,11 +155,10 @@ public class combinedSearchUpdated{
 				IntVar subCircuitVar = subCircuitMatrix[i][j];
 				//store.impose(new Reified(ctr,b));
 				PrimitiveConstraint ctr2 = new XeqC(subCircuitVar,1);
-				store.impose(new Eq(ctr,ctr2));
+				store.impose(new Eq(ctr,ctr2));			
 			}
 		}
 
-		
 		//Enforce a certain amount of visited cities, so that optimization does not lead to zero cities being visited.
 		IntVar[] vehicleVisitedSumList = new IntVar[m];
 		for(int i = 0; i < m; i++){
@@ -225,6 +178,7 @@ public class combinedSearchUpdated{
 		store.impose(sumVisitedCities);
 
 
+
 		//Enforce that the sum of a column in the subCircuit-matrix is not greater than 1.
 		//This translates to a city being visited by at most one vehicle.
 		int[] columnWeights = new int[m];
@@ -242,30 +196,27 @@ public class combinedSearchUpdated{
 			store.impose(columnConstraint);
 		}
 
-		
-		//For each vehicle; calculate the load: load = sum(c*x), where c(i) is the load in a certain town i and x=0 if the town has not been visited and x=1 if it has been visited.
-	
+		//-----------------------------------LOAD------------------------------------------
+
 		//Store the load for each vehicle.
 		IntVar[] vehicleLoads = new IntVar[m];
-		
-		/*
 		//Make a matrix where an element is the product of boolean whether a city is visited and that cities volume. Row: Vehicle, Column; city
 		//Initialize
+		/*
 		IntVar[][] cityVisitedLoad = new IntVar[m][n];
-		for(int i = 0;i < m; i++){
+		for(int i = 0; i < m; i++){
 			for(int j = 0; j < n; j++){
 				cityVisitedLoad[i][j] = new IntVar(store,"cityVisitedLoad#" + Integer.toString(i) +","+ Integer.toString(j), 0,100);
 			}
 		}
-
 		//Make constraints
 		for(int i =0; i < m; i++){
 			for(int j = 0; j < n; j++){
 				Constraint ctr = new XmulCeqZ(subCircuitMatrix[i][j],volumes[j], cityVisitedLoad[i][j]);
-				store.impose(ctr);
+				store.impose(ctr); //!!!!????!!!!???!!!!
 			}
-		}*/
-
+		}
+		*/
 		//Volume for a certain vehicle
 		for(int i = 0; i < m; i++){
 			//IntVar[] list = cityVisitedLoad[i];
@@ -281,6 +232,7 @@ public class combinedSearchUpdated{
 		IntVar totalLoad = new IntVar(store,"totalLoad",0,(100*n));
 		store.impose(new SumInt(store,vehicleLoads,"==",totalLoad));
 
+		//----------------------------------------DISTANCE----------------------------------------------
 
 		//Initialize a variable vector for distance
 		IntVar[] varVectorDistance = new IntVar[m*n];
@@ -314,14 +266,194 @@ public class combinedSearchUpdated{
 		Constraint totalSumCtr = new SumInt(store,vehicleDistanceArray,"==",totalDistance);
 		store.impose(totalSumCtr);
 
+		//-------------------------DEPOT---------------------------------------------
+		//Make sure that these correspond to the rules setup for source and sink in the network
 
-		//Side Constraints-------------------------------------------------------------------------------
 
-		//Side constraint #1: How often a container must be emptied at minimum.
+		//Every vehicle must visit a the two cities that together represent a depot.
+		
+		//Force each vehicle to visit a sink (endCity).
+		for(int i = 0; i < m; i++){
+			IntVar[] depotSinks = new IntVar[depotNbr];
+			int[] weights = new int[depotNbr];
+			for(int j = 0; j < depotNbr; j++){
+				depotSinks[j] = subCircuitMatrix[i][regNbr+depotNbr+j];
+				weights[j] = 1;
+			}
+			PrimitiveConstraint depotConstraint = new LinearInt(store,depotSinks,weights,"=",1);
+			store.impose(depotConstraint);
+		}
+
+		//Make sure that each sink points to it's corresponding source, or is not part of the route (points to itself)
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < depotNbr; j++){
+				IntVar nextCity = nextCities[i][regNbr + depotNbr +j];
+				nextCity.setDomain(regNbr + j + 1,regNbr + j + 1);
+				nextCity.addDom(regNbr + depotNbr + j + 1, regNbr + depotNbr + j + 1);
+			}
+		}
+
+		//Source must not point to other sources or to sinks.
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < depotNbr; j++){
+				IntVar nextCity = nextCities[i][regNbr+j];
+				nextCity.setDomain(1,regNbr);
+				nextCity.addDom(regNbr+j+1,regNbr+j+1);
+			}
+		}
+
+		//Regular cities must not point to sources.
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < regNbr; j++){
+				IntVar nextCity = nextCities[i][j];
+				nextCity.setDomain(1,regNbr);
+				nextCity.addDom(regNbr + depotNbr + 1, n);
+			}
+		}
+
+
+
+
+
+
+
+
+
+		//-------------------------NETWORK---------------------------------------------
+
+		//Construct the NetworkBuilder.
+
+		NetworkBuilder net = new NetworkBuilder();
+
+		Node[] nodeArray = new Node[regNbr + 2 * depotNbr];
+
+		//Construct the regular nodes.
+		for(int i = 0; i < regNbr; i++){
+			nodeArray[i] = net.addNode("Node#" + i,0);
+		}
+
+		//Construct the source and sinks.
+		for(int i = 0; i < vehicleNumbers.length; i++){
+			int b = vehicleNumbers[i];
+			//System.out.println("Debug: " + b);
+			nodeArray[regNbr+i] = net.addNode("Source#" + i,b);
+			nodeArray[regNbr+depotNbr+i] = net.addNode("Sink#" + i,-b);
+		}
+
+
+		//Construct the arcs.
+
+		//Construct IntVars for upper and lower capacity. These will also represent the flow over an arc.
+		//Each row get an extra space to be used in LinearInt later on.
+		BooleanVar[][] flowMatrix = new BooleanVar[n][n+1];
+		for(int i = 0; i < n; i++){
+			for(int j = 0; j < n; j++){
+				boolean sameNode = (i != j); //
+				boolean	sourceSink = !((i >= regNbr) && (j >= regNbr)); //
+				boolean	sourceNoIn = !(j >= regNbr && j < regNbr+depotNbr); //No arcs into source
+				boolean sinkNoOut =  !(i >= regNbr + depotNbr); // No arcs out of sink
+				if(sameNode && sourceSink && sourceNoIn && sinkNoOut){
+					flowMatrix[i][j] = new BooleanVar(store, i + "->" + j, 0,1);
+				}else{
+					flowMatrix[i][j] = new BooleanVar(store, i + "->" + j, 0,0);
+				}
+			}
+		}
+
+		//Define the arcs
+		int cost = 0;
+		Node nodeA = null;
+		Node nodeB = null;
+		BooleanVar flowBounds = null;
+		for(int i =0; i < n; i++){ 
+			nodeA = nodeArray[i];
+			//System.out.println("Debug: " + nodeA);
+			for(int j = 0; j < n; j++){
+				nodeB = nodeArray[j];
+				//System.out.println("Debug: " + nodeB);
+				boolean sameNode = (i != j); //
+				boolean	sourceSink = !((i >= regNbr) && (j >= regNbr)); //
+				boolean	sourceNoIn = !(j >= regNbr && j < regNbr+depotNbr); //No arcs into source
+				boolean sinkNoOut =  !(i >= regNbr + depotNbr); // No arcs out of sink
+				if(sameNode && sourceSink && sourceNoIn && sinkNoOut){ //Cannot go from a node to that node itself, and it shouldn't allow for source and sink to connect directly. Source shouldn't connect to source either and sink shouldn't connect to sink.
+					cost = distanceMatrix[i][j];
+					//System.out.println("Debug: " + cost);
+					flowBounds = flowMatrix[i][j];
+					//System.out.println("Debug: " + flowBounds);
+					net.addArc(nodeA,nodeB,cost,flowBounds);
+				}
+			}
+		}
+
+		//Define a cost.
+		//This should be the total cost-per-unit * flow over all arcs.
+		//This translates into total distance traveled by all vehicles.
+		IntVar totalDistanceFlow = new IntVar(store,"totalDistance",0,m*n*distanceLimit);
+		net.setCostVariable(totalDistanceFlow);
+
+		//Impose the network constraint
+		Constraint networkFlow = new NetworkFlow(net);
+		store.impose(networkFlow);
+
+		//-------------------------------------------- LINK ROUTES AND NETWORK ---------------------------
+
+		for(int i = 0; i < m; i++){
+			for(int j = 0; j < regNbr + depotNbr; j++){
+				for(int k = 0; k < n; k++){
+					if(j != k){
+						PrimitiveConstraint routeJtoK = new XeqC(nextCities[i][j],k+1);
+						PrimitiveConstraint flowJtoK = new XeqC(flowMatrix[j][k],1);
+						store.impose(new IfThen(routeJtoK,flowJtoK));
+					}
+				}
+			}
+		}
+
+		//Update; city is visited <-> not has flow from it (and thereby to it). Only true for regular cities.
+		//Doing this I also constrain the Network nodes to have flow to exactly one other node or no other nodes. 
+		for(int i = 0; i < regNbr; i++){
+			IntVar[] nodeList = new IntVar[n];
+			IntVar[] cityList = new IntVar[m];
+
+			for(int j = 0; j < n;j++){  //Utvidga till n? får den ha flow till något alls? 
+				nodeList[j] = flowMatrix[i][j]; 
+			}
+			for(int j = 0; j < m; j++){
+				cityList[j] = subCircuitMatrix[j][i]; //<--Detta är inget bra sätt att gå igenom en matris på, men det antas att kompilatorn fixar det.
+			}
+
+			BooleanVar nodeSum = new BooleanVar(store,"nodeSum" + i,0,1); 
+			BooleanVar citySum = new BooleanVar(store,"citySum" + i,0,1);  
+
+			store.impose(new SumInt(store,nodeList,"=",nodeSum));
+			store.impose(new SumInt(store,cityList,"=",citySum));
+
+
+			//Makes things weird.
+			store.impose(new XeqY(nodeSum,citySum));
+
+			
+		}
+
+
+
+		//------------------------------------SIDE CONSTRAINTS---------------------------------
+
+		//Side constraint #1: How often a city must be visited at minimum.
 
 		/*Comment: I imagine that this would be dependent on querying a database to check for the latest date the city was visited.
 		this date is then compared to the current date. If the difference is larger than a set period of time the city must be visited.
-		I will represent this with a boolean for now.*/ 
+		I will represent this with a list of cities that need to be visited. If it's empty then no citys have to be visited due to time.*/ 
+
+		//Take notice of the city indexes!
+		ArrayList<Integer> visitDueToTime = new ArrayList<Integer>();
+		//Test (stadindex 3 = stad nr 4 ty stadindex 0 är första staden)
+		//visitDueToTime.add(0);
+		//visitDueToTime.add(7);
+		//visitDueToTime.add(8);
+		//visitDueToTime.add(9);
+		//Add cities that need to be visited to this list.
+
 
 		//Take notice of the city indices!
 		for(int city : visitDueToTime){
@@ -336,6 +468,9 @@ public class combinedSearchUpdated{
 		}
 
 		//Side constraint #2: How long a route can be in units of length.
+		int hardDistanceLimit = 2;
+
+		//Side constraint #2: How long a route can be in units of length.
 		//Ganska reduntant constraint, optimering kommer försöka hitta kortaste möjliga ändå. Det enda denna skule kunna göra
 		//är att meddela att man bör minska antalet påtvingade besökta städer per rutt.
 		/*
@@ -344,6 +479,8 @@ public class combinedSearchUpdated{
 			store.impose(distCtr);
 		}*/
 
+		//Side constraint #3: How many cities a certain vehicle route can contain at most.
+		int mostAmountofcities = n; //n by default.
 
 		//Side constraint #3: How many cities a certain vehicle route can contain at most.
 		for(int i = 0; i < m; i++){
@@ -357,8 +494,20 @@ public class combinedSearchUpdated{
 			store.impose(ub);
 		}
 
-		/*Comment: This will probably most of the time be an unnecessary constraint as the optimization will almost always keep the
-		number of visited cities equal to the lowest number allowed */
+		//Side constraint #4: How full a cities volume can be at most.
+
+		/*Comment: The input for this is given as a float, but it will have to be rounded of to parts of hundreds (or thousands or...) and 
+		be represented as an Integer.*/
+
+		//For each city declare an upper limit of how full it's volume is allowed to be. Represented with a list.
+		int[] maxVolumes = new int[n];
+		int buffer = 0;
+
+		//Default: no restriction.
+		for(int j = 0; j < n; j++){
+			maxVolumes[j] = 101;
+		}
+		//maxVolumes[0] = -1;
 
 		//Side constraint #4: How full a cities volume can be at most.
 
@@ -377,78 +526,15 @@ public class combinedSearchUpdated{
 			}
 		}
 
-		//Side constraint #5: Enforce a specific "special-city" where vehicles start from/or end up. Does not contain a load.
-
-		//Every vehicle must visit exactly one such city.
-		for(int i = 0; i < m; i++){
-			IntVar[] startCities = new IntVar[startNbr];
-			int[] weights = new int[startNbr];
-			for(int j = regNbr; j < regNbr + startNbr; j++){
-				startCities[j-regNbr] = subCircuitMatrix[i][j];
-				weights[j-regNbr] = 1;
-			}
-			PrimitiveConstraint startConstraint = new LinearInt(store,startCities,weights,"=",1);
-			store.impose(startConstraint);
-		}
 
 
 
-		/*Comment: It's effectively the same thing to enforce only start city or only end city.*/
 
-		//Side constraint #6: Enforce two specific "special-cities" one where vehicles start from and another where they end up. Does not contain a load.
+
+
+
+		//-------------------------------------SEARCH---------------------------------------------------------------
 		
-		//endLoc-cities must point only to startLoc-cities. 
-		for(int i = 0; i < m; i++){
-			for(int j = regNbr + startNbr; j < n; j++){
-				IntVar nextCity = nextCities[i][j];
-				//nextCity.setDomain(regNbr+1,regNbr+startNbr);  //Careful with indices
-				int indexOfShortest = findShortest(j,regNbr,startNbr,distanceMatrix);
-				nextCity.setDomain(indexOfShortest+1,indexOfShortest+1);
-				nextCity.addDom((j+1),(j+1));
-			}
-		}
-		
-		
-		//startLoc-cities must not point to endLoc-cities, or other startLoc-cities.
-		for(int i = 0; i < m; i++){
-			for(int j = regNbr; j < regNbr + startNbr; j++){
-				IntVar nextCity = nextCities[i][j];
-				nextCity.setDomain(1,regNbr);
-				nextCity.addDom((j+1),(j+1)); //Den måste få peka på sig själv!!!!!
-			}
-		}
-		
-		//Regular cities may not point to startLoc.
-		for(int i = 0; i < m; i++){
-			for(int j = 0; j < regNbr; j++){
-				IntVar nextCity = nextCities[i][j];
-				nextCity.setDomain(1,regNbr);
-				if(endNbr > 0){//Throw exception here instead of if-condition.
-					nextCity.addDom(regNbr+startNbr+1,n);	
-				}
-			}
-		}
-		
-		
-		
-		
-
-
-
-
-
-
-
-
-			
-
-		/*Comment: Some side constraints forces cities to be visited. Something that can come from this is that
-		more cities are needed to be visited than there are vehicles enough for. This will give the result: No solution.*/
-
-		//--
-
-		//--------------------------------------------------------------------------------------------------
-
 		//Optimize
 
 		//Convert to Float for division
@@ -469,6 +555,7 @@ public class combinedSearchUpdated{
 		//Maximizing x is to minimize (-x)
 		FloatVar negRatio = new FloatVar(store,"negDivision", -ratioLimit,0);
 		Constraint negationConstraint = new PmulCeqR(ratio,-1, negRatio);
+
 		store.impose(negationConstraint);
 
 		//Multiply for precision
@@ -481,7 +568,6 @@ public class combinedSearchUpdated{
 		IntVar negIntRatio = new IntVar(store, "negIntRatio",-ratioLimit*multiplier,0);
 		store.impose(new XeqP(negIntRatio,negRatioMultiplied));
 
-		
 		for(int i = 0; i < m; i++){
 			//Construct the array for a specific vehicle
 			IntVar[] nextCityArray = nextCities[i];
@@ -490,44 +576,51 @@ public class combinedSearchUpdated{
 			store.impose(new Alldistinct(nextCityArray));
 		}
 
-		//store.setLevel(store.level + 1);
-		//store.setLevel(store.level + 1);
-		System.out.println(store.level);
-		Search<IntVar> label = new DepthFirstSearch<IntVar>();
 
-		//Timeout
-		label.setTimeOut(600);
+		
+		Search<IntVar> master = new DepthFirstSearch<IntVar>();
+		Search<IntVar> slave = new DepthFirstSearch<IntVar>();
 
-		//This is where var,varSelect,tieBreakerVarSelect & indomain are decided
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVector,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		//SelectChoicePoint<IntVar> selectTwo = new SimpleSelect<IntVar>(varVector,new MaxRegret<IntVar>(),new IndomainMin<IntVar>());
-					
-		//Stuff for varVectorDistance
-		//SelectChoicePoint<IntVar> select = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
-		SelectChoicePoint<IntVar> selectOne = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
+		master.setTimeOut(600);
+
+		
+		SelectChoicePoint<IntVar> selectMaster = new SimpleSelect<IntVar>(varVectorDistance,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
+		SelectChoicePoint<IntVar> selectSlave = new SimpleSelect<IntVar>(varVector,new MostConstrainedDynamic<IntVar>(),new IndomainMin<IntVar>());
+
+		slave.setSelectChoicePoint(selectSlave);
+		master.addChildSearch(slave);
+		slave.setOptimize(true);
 
 
 		store.setLevel(store.level + 1);
-		//store.raiseLevelBeforeConsistency = true;
-		//boolean result = label.labeling(store,select,negIntRatio);
-		boolean resultOne = label.labeling(store,selectOne,negIntRatio);
-		//boolean resultTwo = label.labeling(store,selectTwo,negIntRatio);
+		
+		boolean resultOne = master.labeling(store,selectMaster,negIntRatio);
+		
 
 
 		if (resultOne) {
 			System.out.println("\n*** Yes");
 			System.out.println("Arrangment: "); 
-			printIntVarMatrix(nextCities,m,n); 
+			printIntVarMatrix(nextCities,m,n);
+			//printIntVarMatrix(subCircuitMatrix,m,n); 
+			//printIntVarMatrix(cityVisitedLoad,m,n);
 			System.out.println("Ratio: " + ratio);
 			System.out.println("distance: " + totalDistance);
 			System.out.println("load: " + totalLoad);
+			//printIntVarMatrix(flowMatrix,n,n);
+			
 			
 		}
-		else System.out.println("\n*** No");
+		else {
+			System.out.println("\n*** No");
+			printIntVarMatrix(nextCities,m,n); 
+			//printIntVarMatrix(flowMatrix,n,n);
+		}
+
 	}
 
 
-//------------------------------------------------------Other methods------------------------------------------------------------------------	
+	//------------------------------------------------------Other methods------------------------------------------------------------------------	
 
 
 	static int findShortest(int endLocIndex,int indexOfFirstStartLoc,int nbrOfStartLocs,int[][] distanceMatrix){
@@ -645,4 +738,22 @@ public class combinedSearchUpdated{
 
 	}
 
+
+
+
+
+	
+
+
+
+
+	
+
+
+
+
+
+
+
+	
 }
